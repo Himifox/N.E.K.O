@@ -1,93 +1,96 @@
 ---
-name: post-work-analysis
-description: After completing a complex debugging or development task, analyze root causes and create/update skill documents to archive lessons learned for future reference.
+name: 📝 任务完成后归档
+description: |
+  **重要提醒**: 每次完成复杂调试或开发任务后，主动执行此流程！
+  将学到的经验归档为 skill，供以后参考。不要等用户提醒。
 ---
 
-# Post-Work Analysis and Skill Archiving
+# 📝 任务完成后归档 (Post-Work Analysis)
 
-After completing a task involving significant debugging, research, or problem-solving, follow this workflow to capture and preserve the knowledge gained.
+> **🔔 触发条件**: 当你刚完成一个涉及调试、研究、或多次迭代的任务时，主动执行此流程！
 
-## When to Apply
+## 应用场景
 
-Use this workflow when:
-- You solved a non-trivial bug or issue
-- You discovered root causes through investigation
-- The solution involved multiple iterations or approaches
-- The knowledge would be valuable for similar future problems
+- ✅ 解决了非平凡的 bug
+- ✅ 通过调查发现了根本原因
+- ✅ 解决方案涉及多次尝试
+- ✅ 知识对未来类似问题有价值
 
-## Workflow Steps
+## 归档流程
 
-### 1. Identify the Direct Cause
-Summarize what directly caused the problem:
+### 1. 识别直接原因
 ```
-Direct Cause: [One-line description]
-Example: "Head colliders were too large, blocking hair from falling"
+直接原因: [一句话描述]
+例: "边界检测使用模型中心点而非可见区域，导致放大后只能看到腿"
 ```
 
-### 2. Analyze Root Causes
-Go deeper - why does this problem exist? Consider:
-- **Design flaws**: Is this a common architectural issue?
-- **Tool/platform limitations**: Known bugs or missing features?
-- **Human factors**: Common mistakes during development?
-- **Documentation gaps**: Missing or unclear documentation?
+### 2. 分析根本原因
+深入思考 - 为什么会存在这个问题？
+- **设计缺陷**: 架构问题？
+- **工具/平台限制**: 已知 bug？缺失功能？
+- **人为因素**: 开发中常见错误？
+- **文档缺失**: 文档不清晰？
 
-Use web search if needed to validate hypotheses and find supporting evidence.
+### 3. 判断是否值得归档为 Skill
 
-### 3. Document in Skill Format
+| 情况 | 是否归档 |
+|------|---------|
+| 通用算法/公式（可复用于其他项目） | ✅ 归档 |
+| 特定框架/库的陷阱和解决方案 | ✅ 归档 |
+| 具体项目的代码组织问题 | ❌ 不归档 |
+| 简单的拼写错误或配置问题 | ❌ 不归档 |
 
-Create or update a skill file at `.agent/skills/<topic>/SKILL.md`:
+### 4. 创建/更新 Skill 文件
+
+路径: `.agent/skills/<topic>/SKILL.md`
 
 ```markdown
 ---
 name: [skill-name]
-description: [Brief description of what this skill covers]
+description: [简要描述这个 skill 涵盖的内容]
 ---
 
-# [Title]
+# [标题]
 
-## Symptoms
-- [Observable problem 1]
-- [Observable problem 2]
+## 症状
+- [可观察的问题 1]
+- [可观察的问题 2]
 
-## Root Causes
-### Cause 1: [Name]
-- **Problem**: [Description]
-- **Why it happens**: [Root cause analysis]
-- **Diagnosis**: [How to confirm]
-- **Solution**: [How to fix]
+## 根本原因
+### 原因 1: [名称]
+- **问题**: [描述]
+- **为什么发生**: [根因分析]
+- **诊断方法**: [如何确认]
+- **解决方案**: [如何修复]
 
-### Cause 2: [Name]
-...
+## 代码解决方案
+[可复用的代码片段和公式]
 
-## Code Solutions
-[Reusable code snippets]
-
-## Key Learnings
-- [Bullet point lessons]
+## 关键经验
+- [要点]
 ```
 
-### 4. Clean Up Debug Code
-Remove temporary debugging code from the codebase, keeping only:
-- The actual fix
-- Useful diagnostic logs (with clear prefixes)
+### 5. 向用户汇报
+- 修复了什么
+- 根因总结
+- 知识归档位置
+- 遗留问题（如有）
 
-### 5. Summarize to User
-Report findings to user including:
-- What was fixed
-- Root cause summary
-- Where knowledge is archived
-- Any remaining known issues
+## 归档示例
 
-## Example Application
+### 示例 1: VRM 物理调试
+- **直接原因**: 头部碰撞体过大
+- **根因**: 模型缩放不一致、Unity 导出 bug
+- **归档**: `.agent/skills/vrm-physics/SKILL.md`
 
-See the VRM physics debugging session that led to:
-- **Direct cause**: Oversized head colliders
-- **Root causes**: Model scaling inconsistency, Unity export bugs, lack of visual feedback during creation
-- **Skill created**: `.agent/skills/vrm-physics/SKILL.md`
+### 示例 2: 3D 拖拽交互
+- **直接原因**: 使用固定 panSpeed 导致缩放后移动不同步
+- **根因**: 未考虑相机距离对像素→世界空间映射的影响
+- **归档**: `.agent/skills/3d-interaction/SKILL.md`（可选）
 
-## Benefits
+## 提醒
 
-- **Knowledge preservation**: Insights don't get lost after conversation ends
-- **Faster future debugging**: Can reference documented solutions
-- **Pattern recognition**: Related issues become easier to identify
-- **Team sharing**: Skills can be shared across projects
+> 🚨 **不要等用户提醒！** 每次完成复杂任务后，主动问自己：
+> 1. 这个问题有通用价值吗？
+> 2. 以后可能再遇到类似问题吗？
+> 3. 如果是，立即归档！
