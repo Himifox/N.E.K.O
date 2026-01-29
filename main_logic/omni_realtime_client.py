@@ -1085,7 +1085,7 @@ class OmniRealtimeClient:
                 if hasattr(server_content, 'output_transcription') and server_content.output_transcription:
                     output_trans = server_content.output_transcription
                     if hasattr(output_trans, 'text') and output_trans.text:
-                        text = output_trans.text
+                        text = output_trans.text.replace(' ', '')  # 去掉空格
                         self._gemini_current_transcript += text
                         # 流式发送到前端（第一个 chunk 标记 is_first=True）
                         if self.on_text_delta:

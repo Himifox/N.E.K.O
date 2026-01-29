@@ -66,9 +66,10 @@
                     <span data-i18n="api.quickStart">快速开始</span>
                 </h3>
                 <ul>
-                    <li><strong data-i18n="api.freeVersion">免费版（推荐新手）：</strong><span
+                    <li><strong data-i18n="api.freeVersion">免费版（推荐新手）：</strong><br><span
                             data-i18n="api.freeVersionDesc">无需注册，在下方高级选项中选择"免费版"即可使用</span></li>
                     <li><strong data-i18n="api.fullVersion">完整版（获取API Key）：</strong></li>
+                    <li><em data-i18n="api.fullVersionNote">这只是一个例子，你完全可以使用OpenAI，Gemini或其他选项</em></li>
                     <li>1. <span data-i18n="api.step1">在阿里云注册账号并</span> <a
                             href="https://myaccount.console.aliyun.com/overview" target="_blank"
                             data-i18n="api.step1Link">完成实名认证</a></li>
@@ -105,6 +106,27 @@
 
                     <form id="api-key-form">
                         <div class="field-row">
+                            <label for="coreApiSelect">
+                                <span data-i18n="api.coreApiProvider">核心API服务商</span>
+                                <div class="tooltip-container">
+                                    <span class="tooltip-icon">?</span>
+                                    <div class="tooltip-content">
+                                        <strong data-i18n="api.coreApiTitle">核心API负责对话功能：</strong><br>
+                                        • <span data-i18n="api.freeVersionCore">免费版：完全免费，无需API
+                                            Key，但不支持自定义语音、Agent模式和视频对话</span><br>
+                                        • <span data-i18n="api.aliCore">阿里：有免费额度，功能全面</span><br>
+                                        • <span data-i18n="api.glmCore">智谱：有免费额度，但需充值1元，内置联网搜索功能</span><br>
+                                        • <span data-i18n="api.stepCore">阶跃星辰：完全免费，但不支持视频</span><br>
+                                        • <span data-i18n="api.openaiCore">OpenAI：智能水平最高，但需要翻墙且价格昂贵</span>
+                                    </div>
+                                </div>
+                            </label>
+                            <select id="coreApiSelect"
+                                style="width: 100%; max-width: 600px; padding: 10px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem;">
+                                <!-- 选项将通过 JavaScript 动态加载 -->
+                            </select>
+                        </div>
+                        <div class="field-row">
                             <label style="display: none;"><span data-i18n="api.coreApiKey">核心API Key</span><span id="freeVersionHint"
                                     style="color: #28a745; font-weight: normal; display: none;"
                                     data-i18n="api.freeVersionHint">（免费版无需填写）</span></label>
@@ -138,27 +160,6 @@
                             Key，适合新手体验（不支持自定义语音、Agent模式和视频对话）</span><br>
                         • <span data-i18n="api.coreApiSuggestion">核心API：负责对话功能，建议根据预算和需求选择</span><br>
                         • <span data-i18n="api.assistApiSuggestion">辅助API：负责记忆管理和自定义语音，只有阿里支持自定义语音</span><br>
-                    </div>
-                    <div class="field-row">
-                        <label for="coreApiSelect">
-                            <span data-i18n="api.coreApiProvider">核心API服务商</span>
-                            <div class="tooltip-container">
-                                <span class="tooltip-icon">?</span>
-                                <div class="tooltip-content">
-                                    <strong data-i18n="api.coreApiTitle">核心API负责对话功能：</strong><br>
-                                    • <span data-i18n="api.freeVersionCore">免费版：完全免费，无需API
-                                        Key，但不支持自定义语音、Agent模式和视频对话</span><br>
-                                    • <span data-i18n="api.aliCore">阿里：有免费额度，功能全面</span><br>
-                                    • <span data-i18n="api.glmCore">智谱：有免费额度，但需充值1元，内置联网搜索功能</span><br>
-                                    • <span data-i18n="api.stepCore">阶跃星辰：完全免费，但不支持视频</span><br>
-                                    • <span data-i18n="api.openaiCore">OpenAI：智能水平最高，但需要翻墙且价格昂贵</span>
-                                </div>
-                            </div>
-                        </label>
-                        <select id="coreApiSelect"
-                            style="width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem;">
-                            <!-- 选项将通过 JavaScript 动态加载 -->
-                        </select>
                     </div>
                     <div class="field-row">
                         <label for="assistApiSelect">

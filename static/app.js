@@ -259,23 +259,17 @@ function init_app() {
         const IDLE_TIMEOUT = 5 * 60 * 1000; // 5分钟
         const CHECK_INTERVAL = 60 * 1000; // 每分钟检查一次
 
-        screenCaptureStreamIdleTimer = setTimeout(() => {
+        screenCaptureStreamIdleTimer = setTimeout(async () => {
             if (screenCaptureStream && screenCaptureStreamLastUsed) {
                 const idleTime = Date.now() - screenCaptureStreamLastUsed;
                 if (idleTime >= IDLE_TIMEOUT) {
-                    // 达到闲置阈值，释放资源
+                    // 达到闲置阈值，调用 stopScreenSharing 统一释放资源并同步 UI
                     console.log(safeT('console.screenShareIdleDetected', 'Screen share idle detected, releasing resources'));
                     try {
-                        if (screenCaptureStream instanceof MediaStream) {
-                            const vt = screenCaptureStream.getVideoTracks?.()?.[0];
-                            if (vt) vt.onended = null;
-                            screenCaptureStream.getTracks().forEach(track => {
-                                try { track.stop(); } catch (_) {}
-                            });
-                        }
+                        await stopScreenSharing();
                     } catch (e) {
                         console.warn(safeT('console.screenShareAutoReleaseFailed', 'Screen share auto-release failed'), e);
-                    } finally {
+                        // stopScreenSharing 失败时，手动清理残留状态防止 double-teardown
                         screenCaptureStream = null;
                         screenCaptureStreamLastUsed = null;
                         screenCaptureStreamIdleTimer = null;

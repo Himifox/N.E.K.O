@@ -625,7 +625,7 @@ background: #fff;
 border: 2px solid #b3e5fc;
 border-top: none;
 border-radius: 0 0 20px 20px;
-padding: 16px 16px;
+padding: 16px 16px 8px 16px;
 margin-left: 0;
 margin-right: 0;
 width: 100%;
@@ -637,44 +637,67 @@ overflow: visible;
 display: block;
 }
 
-/* System Prompt 特殊样式 */
-.fold-content .fold {
-background: #fff;
-border: 2px solid #b3e5fc;
-border-radius: 16px;
-padding: 12px;
+/* System Prompt 特殊样式 - 故意设计得不起眼 */
+.fold-content .system-prompt-fold {
+background: transparent;
+border: none;
+border-radius: 0;
+padding: 0;
 margin-top: 8px;
-overflow: hidden;
+margin-bottom: 0;
+overflow: visible;
 box-sizing: border-box;
 }
 
-.fold-content .fold .fold-toggle {
-color: #40C5F1;
+/* 展开时显示圆角框 */
+.fold-content .system-prompt-fold.open {
+background: #f9f9f9;
+border: 1px solid #e0e0e0;
+border-radius: 12px;
+padding: 8px 12px;
+margin-bottom: 0;
+}
+
+.fold-content .system-prompt-fold .fold-toggle {
+color: #aaa;
 background: transparent;
 font-style: italic;
 font-weight: normal;
-padding: 0;
-margin-bottom: 8px;
-font-size: 0.9rem;
+padding: 4px 8px;
+margin-bottom: 0;
+font-size: 0.75rem;
 font-family: 'Segoe UI', Arial, sans-serif;
 word-wrap: break-word;
 overflow-wrap: break-word;
-max-width: 100%;
+max-width: fit-content;
+opacity: 0.7;
+border-radius: 4px;
 }
 
-.fold-content .fold .fold-content {
+.fold-content .system-prompt-fold .fold-toggle:hover {
+background: rgba(0, 0, 0, 0.05);
+transform: none;
+box-shadow: none;
+}
+
+.fold-content .system-prompt-fold .fold-content {
 background: transparent;
-}
-
-.fold-content .fold .fold-content textarea {
-color: #40C5F1;
-font-size: 0.9rem;
-font-family: 'Segoe UI', Arial, sans-serif;
 border: none;
-background: transparent;
-padding: 8px 0;
+padding: 8px 0 0 0;
+}
+
+.fold-content .system-prompt-fold .fold-content textarea {
+color: #888;
+font-size: 0.85rem;
+font-family: 'Segoe UI', Arial, sans-serif;
+border: 1px solid #e0e0e0 !important;
+background: #fff !important;
+padding: 8px;
 line-height: 1.4;
 width: 100%;
+resize: none !important;
+border-radius: 8px;
+box-sizing: border-box;
 }
 
 /* 限制live2d-link的可点击区域 */

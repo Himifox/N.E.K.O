@@ -465,6 +465,7 @@
     "freeVersion": "免费版（推荐新手）",
     "freeVersionDesc": "无需注册，在下方高级选项中选择\"免费版\"即可使用",
     "fullVersion": "完整版（获取API Key，以阿里为例）",
+    "fullVersionNote": "这只是一个阿里云的例子，你也可以使用其他选项",
     "step1": "在阿里云注册账号并",
     "step1Link": "完成实名认证",
     "step2": "访问阿里云百炼平台",
@@ -525,7 +526,7 @@
       "silicon": "硅基流动"
     },
     "coreProviderNames": {
-      "free": "免费版（猫娘专属福利，最聪明，支持联网搜索）",
+      "free": "免费版（猫娘专属福利，支持联网搜索）",
       "qwen": "Qwen-Omni（阿里，速度最快，推荐⭐）",
       "openai": "GPT-Realtime（OpenAI）",
       "glm": "GLM-realtime（智谱）",
@@ -846,7 +847,8 @@
     "localUpload": "本地上传"
   },
   "voice": {
-    "title": "音色注册 - 请使用阿里云API",
+    "title": "音色注册",
+    "alibabaApiRequired": "⚠️ 此功能需要CosyVoice模型，请在API密钥设置页中配置阿里辅助API或本地语音服务器",
     "selectFile": "选择本地音频文件（15秒最佳，请勿超过30秒，wav/mp3格式）",
     "customPrefix": "自定义前缀（必填，用于区分音色）",
     "customPrefixNote": "不超过10个字符，只支持数字和英文字母",
@@ -946,6 +948,7 @@
     "fillProfileNameFirst": "请先填写猫娘档案名，然后再设置模型",
     "registerNewVoice": "注册新声音",
     "systemPrompt": "系统指令（谨慎修改）",
+    "systemPromptWarning": "系统指令 - 修改可能导致角色行为异常，后果自负",
     "addField": "新增设定",
     "confirmNewCatgirl": "确认新猫娘",
     "saveChanges": "保存修改",
@@ -1114,7 +1117,7 @@
   "settings": {
     "menu": {
       "live2dSettings": "Live2D设置",
-      "modelSettings": "模型管理",
+      "modelSettings": "角色外形",
       "apiKeys": "API密钥",
       "characterManage": "角色管理",
       "voiceClone": "声音克隆",
@@ -1124,7 +1127,8 @@
       "characterSettings": "角色设置",
       "live2dManage": "Live2D管理",
       "apiSettings": "API设置",
-      "language": "语言"
+      "language": "语言",
+      "general": "通用设置"
     },
     "language": {
       "title": "选择语言",

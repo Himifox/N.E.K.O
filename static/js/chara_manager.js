@@ -1071,35 +1071,35 @@ function showCatgirlForm(key, container) {
     voiceWrapper.appendChild(registerVoiceBtn);
     foldContent.appendChild(voiceWrapper);
 
-    // system_prompt fold
+    // system_prompt fold - 故意设计得不起眼，防止用户随意修改
     const innerFold = document.createElement('div');
-    innerFold.className = 'fold';
-    const hr = document.createElement('hr');
-    hr.style.cssText = 'border: none; border-top: 1px solid #e0e0e0; margin: 8px 0;';
-    innerFold.appendChild(hr);
+    innerFold.className = 'fold system-prompt-fold';
+    // 包装容器，用于将按钮放到右侧
+    const sysToggleWrapper = document.createElement('div');
+    sysToggleWrapper.style.display = 'flex';
+    sysToggleWrapper.style.justifyContent = 'flex-end';
+    sysToggleWrapper.style.width = '100%';
     const sysToggle = document.createElement('div');
     sysToggle.className = 'fold-toggle';
-    sysToggle.style.color = '#888';
+    sysToggle.style.color = '#aaa';
     sysToggle.style.fontStyle = 'italic';
-    sysToggle.appendChild(document.createTextNode('system_prompt '));
-    const sysArrow = document.createElement('img');
-    sysArrow.className = 'arrow';
-    sysArrow.src = '/static/icons/dropdown_arrow.png';
-    sysArrow.alt = '';
-    sysArrow.style.width = '32px';
-    sysArrow.style.height = '32px';
-    sysArrow.style.verticalAlign = 'middle';
-    sysArrow.style.transition = 'transform 0.2s';
-    sysArrow.style.transform = 'rotate(-90deg)';
-    sysToggle.appendChild(sysArrow);
-    innerFold.appendChild(sysToggle);
+    sysToggle.style.fontSize = '0.75rem';
+    sysToggle.style.opacity = '0.7';
+    sysToggle.style.width = 'auto';
+    sysToggle.style.display = 'inline-block';
+    sysToggle.style.padding = '4px 8px';
+    sysToggle.appendChild(document.createTextNode('system_prompt'));
+    sysToggleWrapper.appendChild(sysToggle);
+    innerFold.appendChild(sysToggleWrapper);
     const sysContent = document.createElement('div');
     sysContent.className = 'fold-content';
     const sysTextarea = document.createElement('textarea');
     sysTextarea.name = 'system_prompt';
     sysTextarea.rows = 5;
     sysTextarea.style.width = '100%';
-    sysTextarea.placeholder = window.t ? window.t('character.systemPrompt') : '系统指令（谨慎修改）';
+    sysTextarea.style.fontSize = '0.85rem';
+    sysTextarea.style.color = '#666';
+    sysTextarea.placeholder = window.t ? window.t('character.systemPromptWarning') : '系统指令 - 修改可能导致角色行为异常，后果自负';
     sysTextarea.value = cat['system_prompt'] || '';
     sysContent.appendChild(sysTextarea);
     attachTextareaAutoResize(sysTextarea);
@@ -1107,9 +1107,41 @@ function showCatgirlForm(key, container) {
     foldContent.appendChild(innerFold);
 
     fold.appendChild(foldContent);
+
+    // Add Field 按钮区 - 放在 Advanced Settings 之前
+    const addFieldArea = document.createElement('div');
+    addFieldArea.className = 'btn-area add-field-area';
+    addFieldArea.style.display = 'flex';
+    addFieldArea.style.alignItems = 'center';
+    addFieldArea.style.marginTop = '10px';
+    addFieldArea.style.marginBottom = '10px';
+    addFieldArea.style.gap = '12px';
+
+    // 添加一个占位符，宽度和 label 一致 (80px)
+    const addFieldLabelPlaceholder = document.createElement('div');
+    addFieldLabelPlaceholder.style.minWidth = '80px';
+    addFieldLabelPlaceholder.style.flexShrink = '0';
+    addFieldArea.appendChild(addFieldLabelPlaceholder);
+
+    // 添加一个 flex 容器来占满剩余空间，让按钮靠右
+    const addFieldSpacer = document.createElement('div');
+    addFieldSpacer.style.flex = '1';
+    addFieldArea.appendChild(addFieldSpacer);
+
+    const addFieldBtn = document.createElement('button');
+    addFieldBtn.type = 'button';
+    addFieldBtn.className = 'btn sm add';
+    addFieldBtn.id = 'add-catgirl-field-btn';
+    addFieldBtn.style.minWidth = '120px';
+    // 确保使用 innerHTML 以支持图标
+    const addFieldText = (window.t && typeof window.t === 'function') ? `<img src="/static/icons/add.png" alt="" class="add-icon"> <span data-i18n="character.addField">${window.t('character.addField')}</span>` : '<img src="/static/icons/add.png" alt="" class="add-icon"> 新增设定';
+    addFieldBtn.innerHTML = addFieldText;
+    addFieldArea.appendChild(addFieldBtn);
+
+    form.appendChild(addFieldArea);
     form.appendChild(fold);
 
-    // 操作按钮区 - 使用和 field-row-wrapper 相同的结构来对齐
+    // 操作按钮区（保存和取消）- 放在 Advanced Settings 之后
     const btnArea = document.createElement('div');
     btnArea.className = 'btn-area';
     btnArea.style.display = 'flex';
@@ -1127,16 +1159,6 @@ function showCatgirlForm(key, container) {
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
     btnArea.appendChild(spacer);
-
-    const addFieldBtn = document.createElement('button');
-    addFieldBtn.type = 'button';
-    addFieldBtn.className = 'btn sm add';
-    addFieldBtn.id = 'add-catgirl-field-btn';
-    addFieldBtn.style.minWidth = '120px';
-    // 确保使用 innerHTML 以支持图标
-    const addFieldText = (window.t && typeof window.t === 'function') ? `<img src="/static/icons/add.png" alt="" class="add-icon"> <span data-i18n="character.addField">${window.t('character.addField')}</span>` : '<img src="/static/icons/add.png" alt="" class="add-icon"> 新增设定';
-    addFieldBtn.innerHTML = addFieldText;
-    btnArea.appendChild(addFieldBtn);
 
     const saveButton = document.createElement('button');
     saveButton.type = 'submit';
@@ -1296,7 +1318,7 @@ function showCatgirlForm(key, container) {
         fieldRow.appendChild(delBtn);
 
         wrapper.appendChild(fieldRow);
-        form.insertBefore(wrapper, form.querySelector('.fold'));
+        form.insertBefore(wrapper, form.querySelector('.add-field-area'));
 
         // 新增字段后显示操作按钮
         formShowActionButtons();

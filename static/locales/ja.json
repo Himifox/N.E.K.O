@@ -446,6 +446,7 @@
     "freeVersion": "無料版（初心者推奨）",
     "freeVersionDesc": "登録不要。下の「詳細設定」で「無料版」を選択",
     "fullVersion": "完全版（APIキー取得、Alibaba推奨）",
+    "fullVersionNote": "これはAlibaba Cloudの一例です。OpenAI、Gemini、その他のオプションも使用できます",
     "step1": "Alibaba Cloudでアカウント登録と",
     "step1Link": "実名認証を完了",
     "step2": "Alibaba Cloud Bailianの",
@@ -506,7 +507,7 @@
       "silicon": "SiliconFlow"
     },
     "coreProviderNames": {
-      "free": "無料版（猫娘特典、Web検索対応、高知能）",
+      "free": "無料版（猫娘特典、Web検索対応）",
       "qwen": "Qwen-Omni（Alibaba、最速、推奨）",
       "openai": "GPT-Realtime（OpenAI）",
       "glm": "GLM-realtime（GLM）",
@@ -825,10 +826,55 @@
     "userDocuments": "ユーザードキュメント",
     "localUpload": "ローカルアップロード"
   },
+  "voice": {
+    "title": "ボイス登録",
+    "alibabaApiRequired": "⚠️ この機能はCosyVoiceモデルが必要です。APIキー設定でAlibaba Assist APIまたはローカル音声サーバーを設定してください",
+    "selectFile": "ローカル音声ファイルを選択（15秒推奨、最大30秒、wav/mp3形式）",
+    "customPrefix": "カスタムプレフィックス（必須、ボイスの識別用）",
+    "customPrefixNote": "最大10文字、数字と英字のみ",
+    "prefixPlaceholder": "最大10文字、数字と英字のみ",
+    "voiceIdPlaceholder": "最大10文字、数字と英字のみ",
+    "register": "ボイス登録",
+    "pleaseUploadFile": "音声ファイルを選択してください",
+    "pleaseEnterPrefix": "カスタムプレフィックスを入力してください",
+    "prefixFormatError": "プレフィックス形式エラー：最大10文字、数字と英字のみ",
+    "registering": "ボイスを登録中です。お待ちください...",
+    "registerSuccess": "登録成功！voice_id: {{voiceId}}",
+    "registerFailed": "登録失敗：{{error}}",
+    "requestError": "リクエストエラー：{{error}}",
+    "voiceIdSaveFailed": "voice_idの自動保存に失敗しました: {{error}}",
+    "voiceIdSaved": "voice_idをキャラクターに自動保存しました",
+    "pageWillRefresh": "新しいボイスを適用するためにページが自動更新されます",
+    "voiceWillTakeEffect": "新しいボイスは次の会話から有効になります",
+    "voiceIdSaveRequestError": "voice_idの自動保存リクエストエラー",
+    "chooseFile": "ファイルを選択",
+    "noFileSelected": "ファイル未選択",
+    "refLanguage": "参照音声の言語（注意：ターゲット音声ではなく、アップロードした参照音声の言語）",
+    "refLanguageNote": "アップロードした参照音声の言語を選択してください。",
+    "lang": {
+      "ch": "中国語",
+      "en": "英語",
+      "fr": "フランス語",
+      "de": "ドイツ語",
+      "ja": "日本語",
+      "ko": "韓国語",
+      "ru": "ロシア語"
+    },
+    "registeredVoices": "登録済みボイス",
+    "refresh": "更新",
+    "loading": "読み込み中...",
+    "noVoices": "登録済みボイスはありません",
+    "loadError": "読み込み失敗、後でもう一度お試しください",
+    "delete": "削除",
+    "confirmDelete": "このボイスを削除しますか？",
+    "deleting": "削除中...",
+    "deleteSuccess": "削除成功",
+    "deleteFailed": "削除失敗：{{error}}"
+  },
   "settings": {
     "menu": {
       "live2dSettings": "Live2D設定",
-      "modelSettings": "モデル管理",
+      "modelSettings": "キャラ外見",
       "apiKeys": "APIキー",
       "characterManage": "キャラクター管理",
       "voiceClone": "ボイスクローン",
@@ -838,7 +884,8 @@
       "characterSettings": "キャラクター設定",
       "live2dManage": "Live2D管理",
       "apiSettings": "API設定",
-      "language": "言語"
+      "language": "言語",
+      "general": "一般設定"
     },
     "language": {
       "title": "言語を選択",

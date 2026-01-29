@@ -463,6 +463,7 @@
     "freeVersion": "免費版（推薦新手）",
     "freeVersionDesc": "無需注冊，在下方高級選項中選擇\"免費版\"即可使用",
     "fullVersion": "完整版（獲取API Key，以阿裏為例）",
+    "fullVersionNote": "這只是一個阿里雲的例子，你完全可以使用OpenAI、Gemini或其他選項",
     "step1": "在阿裏雲注冊賬號並",
     "step1Link": "完成實名認證",
     "step2": "訪問阿裏雲百煉平颱",
@@ -523,7 +524,7 @@
       "silicon": "矽基流動"
     },
     "coreProviderNames": {
-      "free": "免費版（貓娘專屬福利，最聰明，支持聯網搜索）",
+      "free": "免費版（貓娘專屬福利，支持聯網搜索）",
       "qwen": "Qwen-Omni（阿裏，速度最快，推薦⭐）",
       "openai": "GPT-Realtime（OpenAI）",
       "glm": "GLM-realtime（智譜）",
@@ -843,7 +844,8 @@
     "localUpload": "本地上傳"
   },
   "voice": {
-    "title": "音色注冊 - 請使用阿裏雲API",
+    "title": "音色注冊",
+    "alibabaApiRequired": "⚠️ 此功能需要CosyVoice模型，請在API密鑰設置頁中配置阿里輔助API或本地語音服務器",
     "selectFile": "選擇本地音頻文件（15秒最佳，請勿超過30秒，wav/mp3格式）",
     "customPrefix": "自定義前綴（必填，用於區分音色）",
     "customPrefixNote": "不超過10個字符，隻支持數字和英文字母",
@@ -942,7 +944,8 @@
     "manageModel": "點擊管理模型",
     "fillProfileNameFirst": "請先填寫貓娘檔案名，然後再設置模型",
     "registerNewVoice": "注冊新聲音",
-    "systemPrompt": "係統指令（謹慎修改）",
+    "systemPrompt": "系統指令（謹慎修改）",
+    "systemPromptWarning": "系統指令 - 修改可能導致角色行為異常，後果自負",
     "addField": "新增設定",
     "confirmNewCatgirl": "確認新貓娘",
     "saveChanges": "保存修改",
@@ -1111,7 +1114,7 @@
   "settings": {
     "menu": {
       "live2dSettings": "Live2D設置",
-      "modelSettings": "模型管理",
+      "modelSettings": "角色外形",
       "apiKeys": "API密鑰",
       "characterManage": "角色管理",
       "voiceClone": "聲音剋隆",
@@ -1121,7 +1124,8 @@
       "characterSettings": "角色設置",
       "live2dManage": "Live2D管理",
       "apiSettings": "API設置",
-      "language": "語言"
+      "language": "語言",
+      "general": "通用設置"
     },
     "language": {
       "title": "選擇語言",

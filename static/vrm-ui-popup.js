@@ -274,7 +274,7 @@ VRMManager.prototype._createIntervalControl = function (toggle) {
     Object.assign(container.style, {
         display: 'none',  // 初始完全隐藏，不占用空间
         alignItems: 'center',
-        gap: '6px',
+        gap: '2px',
         padding: '0 12px 0 44px',
         fontSize: '12px',
         color: '#666',
@@ -300,7 +300,7 @@ VRMManager.prototype._createIntervalControl = function (toggle) {
     Object.assign(sliderWrapper.style, {
         display: 'flex',
         alignItems: 'center',
-        gap: '2px',
+        gap: '1px',
         flexShrink: '0'
     });
 
@@ -619,9 +619,10 @@ VRMManager.prototype._createSettingsMenuItems = function (popup) {
             icon: '/static/icons/character_icon.png', 
             action: 'navigate', 
             url: '/chara_manager',
-            // 子菜单：模型管理和声音克隆
+            // 子菜单：通用设置、模型管理、声音克隆
             submenu: [
-                { id: 'vrm-manage', label: window.t ? window.t('settings.menu.modelSettings') : '模型管理', labelKey: 'settings.menu.modelSettings', icon: '/static/icons/live2d_settings_icon.png', action: 'navigate', urlBase: '/model_manager' },
+                { id: 'general', label: window.t ? window.t('settings.menu.general') : '通用设置', labelKey: 'settings.menu.general', icon: '/static/icons/live2d_settings_icon.png', action: 'navigate', url: '/chara_manager' },
+                { id: 'vrm-manage', label: window.t ? window.t('settings.menu.modelSettings') : '模型管理', labelKey: 'settings.menu.modelSettings', icon: '/static/icons/character_icon.png', action: 'navigate', urlBase: '/model_manager' },
                 { id: 'voice-clone', label: window.t ? window.t('settings.menu.voiceClone') : '声音克隆', labelKey: 'settings.menu.voiceClone', icon: '/static/icons/voice_clone_icon.png', action: 'navigate', url: '/voice_clone' }
             ]
         },
