@@ -56,7 +56,6 @@ class DropdownManager {
             iconAltKey: config.iconAltKey || null,  // i18n key for icon alt
             onChange: config.onChange || (() => {}),
             getText: config.getText || ((option) => option.textContent),
-            showFirstOptionWhenEmpty: config.showFirstOptionWhenEmpty !== undefined ? config.showFirstOptionWhenEmpty : true,
             shouldSkipOption: config.shouldSkipOption || ((option) => {
                 const value = option.value;
                 const text = option.textContent;
@@ -135,7 +134,7 @@ class DropdownManager {
                 if (selectedOption) {
                     text = this.config.getText(selectedOption);
                 }
-            } else if (this.select.options.length > 0 && this.config.showFirstOptionWhenEmpty) {
+            } else if (this.select.options.length > 0) {
                 // 没有选择，但有选项：显示第一个“可显示”的选项
                 // 这里不能简单跳过空值选项，否则会导致动作/表情在未选择时显示第一个文件名
                 //（看起来像自动选中），而不是“增加动作/增加表情”。
@@ -726,7 +725,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 defaultTextKey: 'live2d.selectModel',  // i18n key
                 iconAlt: window.i18next?.t('live2d.selectModel') || '选择模型',
                 alwaysShowDefault: false,  // 显示选中的模型名字，而不是默认文本
-                showFirstOptionWhenEmpty: false,
                 shouldSkipOption: (option) => {
                     return option.value === '' && (
                         option.textContent.includes('请选择') ||
@@ -1092,8 +1090,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     let vrmManager = null;
     let vrmAnimations = []; // VRM 动作列表
     let animationsLoaded = false; // 标记VRM动作列表是否已加载
-    let lastSelectedVRMModelValue = '';
-    let lastSelectedLive2DModelValue = '';
 
     const showStatus = (msg, duration = 0) => {
         // 更新状态文本（保持图标结构）
@@ -1117,8 +1113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         availableModels = await RequestHelper.fetchJson('/api/live2d/models');
 
         if (availableModels.length > 0) {
-            const prevValue = modelSelect.value;
-            modelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '选择模型')}</option>`;
+            modelSelect.innerHTML = ''; // 不添加第一个"选择模型"选项
             availableModels.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model.name;
@@ -1126,8 +1121,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 option.dataset.itemId = model.item_id;
                 modelSelect.appendChild(option);
             });
-            const hasPrev = prevValue && availableModels.some(m => m.name === prevValue);
-            modelSelect.value = hasPrev ? prevValue : '';
+            // 如果没有选择，自动选择第一个模型
+            if (modelSelect.options.length > 0 && !modelSelect.value) {
+                modelSelect.value = modelSelect.options[0].value;
+            }
             // 更新按钮文字和下拉菜单
             if (typeof updateLive2DModelDropdown === 'function') {
                 updateLive2DModelDropdown();
@@ -1346,9 +1343,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (type === 'live2d') {
-            if (!lastSelectedVRMModelValue && vrmModelSelect && vrmModelSelect.value) {
-                lastSelectedVRMModelValue = vrmModelSelect.value;
-            }
             // 【新增】清理VRM资源
             if (window.vrmManager) {
                 try {
@@ -1495,74 +1489,72 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 【新增】清理Live2D资源（内存管理改进）
             if (window.live2dManager) {
                 try {
-                    const app = window.live2dManager.pixi_app;
-                    const live2dModel = window.live2dManager.currentModel;
-
-                    if (app && app.ticker && typeof app.ticker.stop === 'function') {
+                    // 1. 先从舞台移除模型（避免销毁时访问已移除的对象）
+                    if (window.live2dManager.currentModel && window.live2dManager.pixi_app && window.live2dManager.pixi_app.stage) {
                         try {
-                            app.ticker.stop();
+                            window.live2dManager.pixi_app.stage.removeChild(window.live2dManager.currentModel);
                         } catch (e) {
+                            console.warn('[模型管理] 从舞台移除模型时出现警告:', e);
                         }
                     }
 
-                    if (live2dModel) {
-                        try {
-                            if (live2dModel.parent && typeof live2dModel.parent.removeChild === 'function') {
-                                live2dModel.parent.removeChild(live2dModel);
-                            }
-                        } catch (e) {
-                        }
+                    // 2. 销毁模型本身（不要提前清空 internalModel）
+                    if (window.live2dManager.currentModel) {
+                        const live2dModel = window.live2dManager.currentModel;
 
-                        try {
-                            if (typeof live2dModel.destroy === 'function') {
-                                live2dModel.destroy();
-                            }
-                        } catch (destroyError) {
-                            const msg = destroyError && (destroyError.message || String(destroyError));
-                            if (!msg.includes("Cannot read properties of null") && !msg.includes("reading 'destroy'")) {
-                                console.warn('[模型管理] 销毁 Live2D 模型时出现警告:', destroyError);
-                            }
-                        }
-
-                        try {
-                            if (typeof live2dModel.release === 'function') {
+                        // 尝试调用 release 方法释放模型资源
+                        if (typeof live2dModel.release === 'function') {
+                            try {
                                 live2dModel.release();
                                 console.log('[模型管理] Live2D 模型资源已释放');
+                            } catch (releaseError) {
+                                console.warn('[模型管理] 释放 Live2D 模型资源时出现警告:', releaseError);
                             }
-                        } catch (releaseError) {
-                            console.warn('[模型管理] 释放 Live2D 模型资源时出现警告:', releaseError);
                         }
 
+                        // 销毁模型（让 PIXI 自己处理内部清理）
+                        try {
+                            live2dModel.destroy({ children: true });
+                        } catch (e) {
+                            console.warn('[模型管理] 销毁 Live2D 模型时出现警告:', e);
+                        }
+
+                        // 清空模型引用
                         window.live2dManager.currentModel = null;
                     }
 
-                    if (app) {
+                    // 3. 销毁PIXI应用（在模型销毁之后）
+                    if (window.live2dManager.pixi_app) {
                         try {
-                            if (app.stage && typeof app.stage.removeChildren === 'function') {
-                                app.stage.removeChildren();
+                            // 先停止 ticker 防止渲染已销毁的对象
+                            if (window.live2dManager.pixi_app.ticker) {
+                                window.live2dManager.pixi_app.ticker.stop();
                             }
-                        } catch (e) {
-                        }
-
-                        try {
-                            app.destroy(true, { children: true });
+                            // 销毁 PIXI 应用，但不销毁 children（已经在上面处理过了）
+                            window.live2dManager.pixi_app.destroy(true, {
+                                children: false,
+                                texture: true,
+                                baseTexture: true
+                            });
+                            window.live2dManager.pixi_app = null;
+                            // 【关键修复】重置初始化标志
+                            window.live2dManager.isInitialized = false;
+                            console.log('[模型管理] PIXI 应用已销毁');
                         } catch (pixiError) {
-                            try {
-                                app.destroy(true);
-                            } catch (pixiError2) {
-                                const msg = pixiError2 && (pixiError2.message || String(pixiError2));
-                                if (!msg.includes("Cannot read properties of null") && !msg.includes("reading 'destroy'")) {
-                                    console.warn('[模型管理] PIXI销毁时出现警告:', pixiError2);
-                                }
-                            }
+                            console.warn('[模型管理] PIXI销毁时出现警告:', pixiError);
+                            // 即使销毁出错，也要重置状态
+                            window.live2dManager.pixi_app = null;
+                            window.live2dManager.isInitialized = false;
                         }
-
-                        window.live2dManager.pixi_app = null;
-                        window.live2dManager.isInitialized = false;
-                        console.log('[模型管理] PIXI 应用已销毁');
                     }
                 } catch (cleanupError) {
                     console.warn('[模型管理] Live2D清理时出现警告:', cleanupError);
+                    // 确保状态被重置
+                    if (window.live2dManager) {
+                        window.live2dManager.currentModel = null;
+                        window.live2dManager.pixi_app = null;
+                        window.live2dManager.isInitialized = false;
+                    }
                 }
             }
 
@@ -1735,27 +1727,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 showStatus(t('live2d.vrmInitFailed', `VRM 场景初始化失败: ${error.message}`));
             }
 
-            try {
-                await loadVRMModels();
-            } catch (error) {
+            // 加载 VRM 模型列表（仅在切换到VRM模式时调用，不阻塞其他功能）
+            // 注意：如果已经在页面初始化时加载过，这里会重新加载以确保列表是最新的
+            loadVRMModels().catch(error => {
                 console.error('加载VRM模型列表失败:', error);
-            }
-
-            const hasModelLoaded = !!(vrmManager && vrmManager.currentModel);
-            const preferredModelValue = (vrmModelSelect && vrmModelSelect.value) ? vrmModelSelect.value : lastSelectedVRMModelValue;
-            if (!hasModelLoaded && vrmModelSelect && preferredModelValue) {
-                const matchedOption = Array.from(vrmModelSelect.options).find(opt => {
-                    const optPath = opt.getAttribute('data-path');
-                    const optValue = opt.value;
-                    return optValue === preferredModelValue || optPath === preferredModelValue;
-                });
-                if (matchedOption) {
-                    vrmModelSelect.value = matchedOption.value;
-                } else {
-                    vrmModelSelect.value = preferredModelValue;
-                }
-                vrmModelSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            });
         }
     }
 
@@ -1784,12 +1760,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             await switchModelDisplay(type);
 
+            // 从 VRM 切回 Live2D 时，确保当前 Live2D 模型会被加载出来
+            //（switchModelDisplay 会重建 PIXI，但不会自动触发 model-select 的 change）
             if (type === 'live2d') {
-                if (modelSelect) {
-                    modelSelect.value = '';
-                }
-                if (typeof updateLive2DModelSelectButtonText === 'function') {
-                    updateLive2DModelSelectButtonText();
+                try {
+                    const hasModelLoaded = !!(window.live2dManager && window.live2dManager.currentModel);
+                    if (!hasModelLoaded) {
+                        // 优先使用当前下拉框选中项；没有则选择第一个可用模型
+                        let modelName = modelSelect ? modelSelect.value : '';
+                        if (!modelName && modelSelect && modelSelect.options && modelSelect.options.length > 0) {
+                            modelName = modelSelect.options[0].value;
+                            modelSelect.value = modelName;
+                        }
+
+                        if (modelName) {
+                            const modelInfo = (currentModelInfo && currentModelInfo.name === modelName)
+                                ? currentModelInfo
+                                : (Array.isArray(availableModels) ? availableModels.find(m => m.name === modelName) : null);
+
+                            if (modelInfo) {
+                                const selectedOption = modelSelect ? modelSelect.options[modelSelect.selectedIndex] : null;
+                                const modelSteamId = selectedOption ? selectedOption.dataset.itemId : modelInfo.item_id;
+                                await loadModel(modelName, modelInfo, modelSteamId);
+                            } else {
+                                console.warn('[模型管理] 切回 Live2D 时未找到模型信息，跳过自动加载:', modelName);
+                            }
+                        }
+                    }
+                } catch (autoLoadError) {
+                    console.warn('[模型管理] 切回 Live2D 自动加载模型失败:', autoLoadError);
                 }
             }
         });
@@ -1805,11 +1804,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const models = (data.success && Array.isArray(data.models)) ? data.models : [];
             if (!vrmModelSelect) return;
-            const prevValue = vrmModelSelect.value;
-            const prevSelectedOption = vrmModelSelect.options && vrmModelSelect.selectedIndex >= 0
-                ? vrmModelSelect.options[vrmModelSelect.selectedIndex]
-                : null;
-            const prevDataPath = prevSelectedOption ? prevSelectedOption.getAttribute('data-path') : null;
 
             if (models.length > 0) {
                 // 添加第一个"选择模型"选项
@@ -1858,17 +1852,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 vrmModelSelect.disabled = false;
                 if (vrmModelSelectBtn) {
                     vrmModelSelectBtn.disabled = false;
-                }
-                if (prevValue || prevDataPath) {
-                    const matchedOption = Array.from(vrmModelSelect.options).find(opt => {
-                        const optPath = opt.getAttribute('data-path');
-                        const optValue = opt.value;
-                        return (prevValue && (optValue === prevValue || optPath === prevValue)) ||
-                            (prevDataPath && (optPath === prevDataPath || optValue === prevDataPath));
-                    });
-                    if (matchedOption) {
-                        vrmModelSelect.value = matchedOption.value;
-                    }
                 }
                 // 不自动选择模型，让用户手动选择
                 updateVRMModelDropdown();
@@ -1932,7 +1915,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateVRMModelSelectButtonText();
             const modelPath = e.target.value;
             if (!modelPath) return;
-            lastSelectedVRMModelValue = modelPath;
 
             // 检查语音模式状态
             const voiceStatus = await checkVoiceModeStatus();
@@ -2810,7 +2792,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         if (!modelName) return;
-        lastSelectedLive2DModelValue = modelName;
 
         // 检查语音模式状态
         const voiceStatus = await checkVoiceModeStatus();
@@ -4380,15 +4361,53 @@ document.addEventListener('DOMContentLoaded', async () => {
             // 先切换模型类型，清理旧模型资源
             await switchModelDisplay(modelType);
 
-            if (modelType === 'vrm') {
-                try {
-                    await loadVRMModels();
-                } catch (e) {
-                    console.warn('[模型管理] 预加载 VRM 模型列表失败:', e);
-                }
-            }
-
+            // 在模型管理页面，不自动加载VRM模型，等待用户手动选择
+            // 只有当模型类型是 VRM 且存在有效的 VRM 路径时才加载（但不在模型管理页面自动加载）
             if (modelType === 'vrm' && hasValidVRMPath) {
+                // 检查是否在模型管理页面，如果是则不自动加载，只设置选择器的值
+                const isModelManagerPage = window.location.pathname.includes('model_manager');
+                if (isModelManagerPage) {
+                    // 在模型管理页面，只设置选择器的值，不自动加载模型
+                    let vrmModelPath = null;
+                    if (catgirlConfig.vrm !== undefined && catgirlConfig.vrm !== null) {
+                        const rawValue = catgirlConfig.vrm;
+                        if (typeof rawValue === 'string') {
+                            const trimmed = rawValue.trim();
+                            if (trimmed !== '' &&
+                                trimmed.toLowerCase() !== 'undefined' &&
+                                trimmed.toLowerCase() !== 'null' &&
+                                !trimmed.toLowerCase().includes('undefined') &&
+                                !trimmed.toLowerCase().includes('null')) {
+                                vrmModelPath = trimmed;
+                            }
+                        } else {
+                            const strValue = String(rawValue);
+                            const lowerStr = strValue.toLowerCase();
+                            if (lowerStr !== 'undefined' && lowerStr !== 'null' && !lowerStr.includes('undefined')) {
+                                vrmModelPath = strValue;
+                            }
+                        }
+                    }
+
+                    // 如果路径有效，设置选择器的值，但不加载模型
+                    if (vrmModelPath && vrmModelSelect) {
+                        // 尝试在下拉列表中找到匹配的选项
+                        const matchedOption = Array.from(vrmModelSelect.options).find(opt => {
+                            const optPath = opt.getAttribute('data-path');
+                            const optValue = opt.value;
+                            return optPath === vrmModelPath || optValue === vrmModelPath ||
+                                (optPath && optPath.includes(vrmModelPath.split(/[/\\]/).pop()));
+                        });
+
+                        if (matchedOption) {
+                            vrmModelSelect.value = matchedOption.value;
+                        } else {
+                        }
+                    }
+                    return; // 在模型管理页面不自动加载，直接返回
+                }
+
+                // 非模型管理页面，继续原有的自动加载逻辑
                 // VRM 模型
                 // 安全获取 VRM 模型路径（已经验证过有效性）
                 let vrmModelPath = null;
@@ -4488,18 +4507,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // 设置模型选择器
                 if (vrmModelSelect) {
-                    const matchedOption = Array.from(vrmModelSelect.options).find(opt => {
-                        const optPath = opt.getAttribute('data-path');
-                        const optValue = opt.value;
-                        return optPath === vrmModelPath || optValue === vrmModelPath ||
-                            (optPath && optPath.includes(vrmModelPath.split(/[/\\]/).pop()));
-                    });
-                    vrmModelSelect.value = matchedOption ? matchedOption.value : vrmModelPath;
-                    updateVRMModelDropdown();
-                    updateVRMModelSelectButtonText();
-                    if (vrmModelSelect.value) {
-                        lastSelectedVRMModelValue = vrmModelSelect.value;
-                    }
+                    vrmModelSelect.value = vrmModelPath;
                 }
 
                 // 设置当前模型信息
