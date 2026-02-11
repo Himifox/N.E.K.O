@@ -228,6 +228,10 @@ function init_app() {
     let socket;
     // 将 currentGeminiMessage 改为全局变量，供字幕模块使用
     window.currentGeminiMessage = null;
+    // 追踪本轮 AI 回复的所有气泡（用于改写时删除）
+    window.currentTurnGeminiBubbles = [];
+    // 拟真输出队列版本号，用于取消旧任务
+    window._realisticGeminiVersion = 0;
     let audioPlayerContext = null;
     let videoTrack, videoSenderInterval;
     let audioBufferQueue = [];
@@ -467,6 +471,58 @@ function init_app() {
                     }
                     
                     appendMessage(response.text, 'gemini', isNewMessage);
+                } else if (response.type === 'response_discarded') {
+                    const attempt = response.attempt || 0;
+                    const maxAttempts = response.max_attempts || 0;
+                    console.log(`[Discard] AI回复被丢弃 reason=${response.reason} attempt=${attempt}/${maxAttempts} retry=${response.will_retry}`);
+                    
+                    window._realisticGeminiQueue = [];
+                    window._realisticGeminiBuffer = '';
+                    window._realisticGeminiVersion = (window._realisticGeminiVersion || 0) + 1;
+                    
+                    if (window.currentTurnGeminiBubbles && window.currentTurnGeminiBubbles.length > 0) {
+                        window.currentTurnGeminiBubbles.forEach(bubble => {
+                            if (bubble && bubble.parentNode) {
+                                bubble.parentNode.removeChild(bubble);
+                            }
+                        });
+                        window.currentTurnGeminiBubbles = [];
+                    }
+
+                    if ((!window.currentTurnGeminiBubbles || window.currentTurnGeminiBubbles.length === 0) &&
+                        chatContainer && chatContainer.children && chatContainer.children.length > 0) {
+                        const toRemove = [];
+                        for (let i = chatContainer.children.length - 1; i >= 0; i--) {
+                            const el = chatContainer.children[i];
+                            if (el.classList && el.classList.contains('message') && el.classList.contains('gemini')) {
+                                toRemove.push(el);
+                            } else {
+                                break;
+                            }
+                        }
+                        toRemove.forEach(el => {
+                            if (el && el.parentNode) {
+                                el.parentNode.removeChild(el);
+                            }
+                        });
+                    }
+
+                    window._geminiTurnFullText = '';
+                    
+                    const retryMsg = window.t ? window.t('console.aiRetrying') : '猫娘链接出现异常，校准中…';
+                    const failMsg = window.t ? window.t('console.aiFailed') : '猫娘链接出现异常';
+                    showStatusToast(response.will_retry ? retryMsg : failMsg, 2500);
+                    
+                    if (!response.will_retry && response.message) {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.classList.add('message', 'gemini');
+                        messageDiv.textContent = "[" + getCurrentTimeString() + "] 🎀 " + response.message;
+                        chatContainer.appendChild(messageDiv);
+                        window.currentGeminiMessage = messageDiv;
+                        window.currentTurnGeminiBubbles = [messageDiv];
+                    }
+                    
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
                 } else if (response.type === 'user_transcript') {
                     // 语音模式下的用户转录合并机制（兜底，防止 Gemini 等模型碎片化转录刷屏）
                     const now = Date.now();
@@ -746,7 +802,7 @@ function init_app() {
                             window._realisticGeminiQueue = window._realisticGeminiQueue || [];
                             window._realisticGeminiQueue.push(trimmed);
                             window._realisticGeminiBuffer = '';
-                            processRealisticQueue();
+                            processRealisticQueue(window._realisticGeminiVersion || 0);
                         }
                     } catch (e) {
                         console.warn(window.t('console.turnEndFlushFailed'), e);
@@ -1319,6 +1375,10 @@ function init_app() {
         messageDiv.textContent = "[" + getCurrentTimeString() + "] 🎀 " + sentence;
         chatContainer.appendChild(messageDiv);
         window.currentGeminiMessage = messageDiv;
+        
+        // ========== 新增：追踪本轮气泡 ==========
+        window.currentTurnGeminiBubbles.push(messageDiv);
+        // ========== 追踪结束 ==========
 
         // 检测AI消息的语言，如果与用户语言不同，显示字幕提示框
         checkAndShowSubtitlePrompt(sentence);
@@ -1331,12 +1391,15 @@ function init_app() {
         }
     }
 
-    async function processRealisticQueue() {
+    async function processRealisticQueue(queueVersion = window._realisticGeminiVersion || 0) {
         if (window._isProcessingRealisticQueue) return;
         window._isProcessingRealisticQueue = true;
 
         try {
             while (window._realisticGeminiQueue && window._realisticGeminiQueue.length > 0) {
+                if ((window._realisticGeminiVersion || 0) !== queueVersion) {
+                    break;
+                }
                 // 基于时间戳的延迟：确保每句之间至少间隔2秒
                 const now = Date.now();
                 const timeSinceLastBubble = now - (window._lastBubbleTime || 0);
@@ -1344,8 +1407,12 @@ function init_app() {
                     await new Promise(resolve => setTimeout(resolve, 2000 - timeSinceLastBubble));
                 }
 
+                if ((window._realisticGeminiVersion || 0) !== queueVersion) {
+                    break;
+                }
+
                 const s = window._realisticGeminiQueue.shift();
-                if (s) {
+                if (s && (window._realisticGeminiVersion || 0) === queueVersion) {
                     createGeminiBubble(s);
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                     window._lastBubbleTime = Date.now();
@@ -1355,7 +1422,7 @@ function init_app() {
             window._isProcessingRealisticQueue = false;
             // 兜底检查：如果在循环结束到重置标志位之间又有新消息进入队列，递归触发
             if (window._realisticGeminiQueue && window._realisticGeminiQueue.length > 0) {
-                processRealisticQueue();
+                processRealisticQueue(window._realisticGeminiVersion || 0);
             }
         }
     }
@@ -1407,7 +1474,11 @@ function init_app() {
         // 维护“本轮 AI 回复”的完整文本（用于 turn end 时整段翻译/情感分析）
         if (sender === 'gemini') {
             if (isNewMessage) {
+                window._realisticGeminiVersion = (window._realisticGeminiVersion || 0) + 1;
                 window._geminiTurnFullText = '';
+                // ========== 新增：重置本轮气泡追踪 ==========
+                window.currentTurnGeminiBubbles = [];
+                // ========== 重置结束 ==========
             }
             const prevFull = typeof window._geminiTurnFullText === 'string' ? window._geminiTurnFullText : '';
             window._geminiTurnFullText = prevFull + normalizeGeminiText(text);
@@ -1428,7 +1499,7 @@ function init_app() {
             if (sentences.length > 0) {
                 window._realisticGeminiQueue = window._realisticGeminiQueue || [];
                 window._realisticGeminiQueue.push(...sentences);
-                processRealisticQueue();
+                processRealisticQueue(window._realisticGeminiVersion || 0);
             }
         } else if (sender === 'gemini' && isMergeMessagesEnabled() && isNewMessage) {
             // 合并消息开启：新一轮开始时，清空拟真缓冲，防止残留
@@ -1440,6 +1511,9 @@ function init_app() {
             messageDiv.textContent = "[" + getCurrentTimeString() + "] 🎀 " + (text || '');
             chatContainer.appendChild(messageDiv);
             window.currentGeminiMessage = messageDiv;
+            // ========== 新增：追踪本轮气泡 ==========
+            window.currentTurnGeminiBubbles.push(messageDiv);
+            // ========== 追踪结束 ==========
 
             checkAndShowSubtitlePrompt(text);
 
@@ -1504,6 +1578,9 @@ function init_app() {
             // 如果是Gemini消息，更新当前消息引用
             if (sender === 'gemini') {
                 window.currentGeminiMessage = messageDiv;
+                // ========== 新增：追踪本轮气泡 ==========
+                window.currentTurnGeminiBubbles.push(messageDiv);
+                // ========== 追踪结束 ==========
 
                 // 检测AI消息的语言，如果与用户语言不同，显示字幕提示框
                 checkAndShowSubtitlePrompt(text);
@@ -8043,6 +8120,7 @@ function init_app() {
             window._realisticGeminiQueue = [];
             window._realisticGeminiBuffer = '';
             window._realisticGeminiTimestamp = null;
+            window._realisticGeminiVersion = (window._realisticGeminiVersion || 0) + 1;
             // 重置语音模式用户转录合并追踪
             lastVoiceUserMessage = null;
             lastVoiceUserMessageTime = 0;
