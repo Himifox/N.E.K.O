@@ -3,6 +3,7 @@
 
 from copy import deepcopy
 import logging
+import os
 from types import MappingProxyType
 
 from config.prompts_chara import lanlan_prompt
@@ -12,15 +13,31 @@ logger = logging.getLogger(__name__)
 # 应用程序名称配置
 APP_NAME = "N.E.K.O"
 
+# Runtime port override support:
+# - preferred key: NEKO_<PORT_NAME>
+# - compatibility key: <PORT_NAME>
+def _read_port_env(port_name: str, default: int) -> int:
+    for key in (f"NEKO_{port_name}", port_name):
+        raw = os.getenv(key)
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+            if 1 <= value <= 65535:
+                return value
+        except Exception:
+            continue
+    return default
+
 # 服务器端口配置
-MAIN_SERVER_PORT = 48911
-MEMORY_SERVER_PORT = 48912
-MONITOR_SERVER_PORT = 48913
-COMMENTER_SERVER_PORT = 48914
-TOOL_SERVER_PORT = 48915
-USER_PLUGIN_SERVER_PORT = 48916
-AGENT_MQ_PORT = 48917
-MAIN_AGENT_EVENT_PORT = 48918
+MAIN_SERVER_PORT = _read_port_env("MAIN_SERVER_PORT", 48911)
+MEMORY_SERVER_PORT = _read_port_env("MEMORY_SERVER_PORT", 48912)
+MONITOR_SERVER_PORT = _read_port_env("MONITOR_SERVER_PORT", 48913)
+COMMENTER_SERVER_PORT = _read_port_env("COMMENTER_SERVER_PORT", 48914)
+TOOL_SERVER_PORT = _read_port_env("TOOL_SERVER_PORT", 48915)
+USER_PLUGIN_SERVER_PORT = _read_port_env("USER_PLUGIN_SERVER_PORT", 48916)
+AGENT_MQ_PORT = _read_port_env("AGENT_MQ_PORT", 48917)
+MAIN_AGENT_EVENT_PORT = _read_port_env("MAIN_AGENT_EVENT_PORT", 48918)
 
 # MCP Router配置
 MCP_ROUTER_URL = 'http://localhost:3282'

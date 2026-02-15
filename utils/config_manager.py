@@ -1275,6 +1275,82 @@ class ConfigManager:
             str: workshop配置文件的绝对路径
         """
         return str(self.get_config_path('workshop_config.json'))
+
+    def _normalize_workshop_folder_path(self, folder_path):
+        """标准化 workshop 目录路径，失败时返回 None。"""
+        if not isinstance(folder_path, str):
+            return None
+
+        path_str = folder_path.strip()
+        if not path_str:
+            return None
+
+        try:
+            # 与 workshop_utils 保持一致：相对路径按用户目录解析
+            if not os.path.isabs(path_str):
+                path_str = os.path.join(os.path.expanduser('~'), path_str)
+            return os.path.normpath(path_str)
+        except Exception:
+            return None
+
+    def _cleanup_invalid_workshop_config_file(self, config_path):
+        """
+        检查并清理无效的 workshop 配置文件。
+
+        判定规则：如果配置中任一路径字段存在但不是有效目录，则删除整个配置文件。
+        """
+        if not config_path.exists():
+            return False
+
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception as e:
+            logger.warning(f"workshop配置文件损坏，准备删除: {config_path}, error={e}")
+            try:
+                config_path.unlink()
+                return True
+            except Exception as delete_error:
+                logger.error(f"删除损坏workshop配置文件失败: {config_path}, error={delete_error}")
+                return False
+
+        if not isinstance(config_data, dict):
+            logger.warning(f"workshop配置格式非法（非对象），准备删除: {config_path}")
+            try:
+                config_path.unlink()
+                return True
+            except Exception as delete_error:
+                logger.error(f"删除非法workshop配置文件失败: {config_path}, error={delete_error}")
+                return False
+
+        path_keys = ("user_mod_folder", "WORKSHOP_PATH", "steam_workshop_path", "default_workshop_folder")
+        for key in path_keys:
+            if key not in config_data:
+                continue
+
+            normalized_path = self._normalize_workshop_folder_path(config_data.get(key))
+            if not normalized_path or not os.path.isdir(normalized_path):
+                logger.warning(
+                    f"发现无效workshop路径，准备删除配置文件: {config_path}, "
+                    f"field={key}, value={config_data.get(key)!r}"
+                )
+                try:
+                    config_path.unlink()
+                    return True
+                except Exception as delete_error:
+                    logger.error(f"删除无效workshop配置文件失败: {config_path}, error={delete_error}")
+                    return False
+
+        return False
+
+    def _cleanup_invalid_workshop_configs(self):
+        """同时检查文档目录和项目目录中的 workshop 配置并清理无效文件。"""
+        candidates = (
+            self.config_dir / "workshop_config.json",
+            self.project_config_dir / "workshop_config.json",
+        )
+        for candidate in candidates:
+            self._cleanup_invalid_workshop_config_file(candidate)
     
     def load_workshop_config(self):
         """
@@ -1283,6 +1359,9 @@ class ConfigManager:
         Returns:
             dict: workshop配置数据
         """
+        # 兼容历史错误配置：无论配置位于文档目录还是软件目录，先做一次自愈清理
+        self._cleanup_invalid_workshop_configs()
+
         config_path = self.get_workshop_config_path()
         try:
             if os.path.exists(config_path):
