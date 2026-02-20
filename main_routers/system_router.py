@@ -712,8 +712,8 @@ async def proactive_chat(request: Request):
     try:
         _config_manager = get_config_manager()
         session_manager = get_session_manager()
-        from utils.web_scraper import fetch_trending_content, format_trending_content, fetch_window_context_content, format_window_context_content
-        
+        from utils.web_scraper import fetch_public_content, format_public_content, fetch_window_context_content, format_window_context_content
+        from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics # 增加个人动态
         # 获取当前角色数据
         master_name_current, her_name_current, _, _, _, _, _, _, _, _ = _config_manager.get_character_data()
         
@@ -742,7 +742,10 @@ async def proactive_chat(request: Request):
         
         # 检查是否使用窗口搜索模式
         use_window_search = data.get('use_window_search', False)
-        
+
+        # 检查是否使用个性化内容模式
+        use_personal_dynamic = data.get('use_personal_dynamic', False)
+
         # 前端已经根据三种模式决定是否使用截图
         use_screenshot = has_screenshot and not use_window_search
         
@@ -770,6 +773,8 @@ async def proactive_chat(request: Request):
                     "error": f"截图处理失败: {str(e)}",
                     "action": "pass"
                 }, status_code=500)
+        elif use_personal_dynamic:
+            logger.info(f"[{lanlan_name}] 前端选择使用个人动态进行主动搭话")
         elif not use_window_search:
             logger.info(f"[{lanlan_name}] 前端选择使用首页推荐进行主动搭话")
         
@@ -811,11 +816,71 @@ async def proactive_chat(request: Request):
                 logger.exception(f"[{lanlan_name}] 获取窗口上下文失败")
                 # 回退到首页推荐
                 use_window_search = False
-        
-        if not use_screenshot and not use_window_search:
-            # 首页推荐主动对话
+
+        # 根据不同模式获取内容
+        if use_personal_dynamic:
+            # 个性化内容主动对话
             try:
-                trending_content = await fetch_trending_content(bilibili_limit=10, weibo_limit=10)
+                personal_content = await fetch_personal_dynamics(limit=10)
+                
+                if not personal_content['success']:
+                    return JSONResponse({
+                        "success": False,
+                        "error": "无法获取个性化内容",
+                        "detail": personal_content.get('error', '未知错误')
+                    }, status_code=500)
+                
+                formatted_content = format_personal_dynamics(personal_content)
+                
+                # 显示具体的个性化内容详情
+                content_details = []
+                
+                # 数据结构引用：个人动态数据存储在 bilibili_dynamic 和 weibo_dynamic 字段中
+                bilibili_dynamic = personal_content.get('bilibili_dynamic', {})
+                if bilibili_dynamic.get('success'):
+                    dynamics = bilibili_dynamic.get('dynamics', [])
+                    bilibili_contents = [dynamic.get('content', dynamic.get('title', '')) for dynamic in dynamics[:10]]
+                    if bilibili_contents:
+                        content_details.append("B站动态:")
+                        for content in bilibili_contents:
+                            content_details.append(f"  - {content}")
+                
+                weibo_dynamic = personal_content.get('weibo_dynamic', {})
+                if weibo_dynamic.get('success'):
+                    dynamics = weibo_dynamic.get('dynamics', [])
+                    weibo_contents = [dynamic.get('content', '') for dynamic in dynamics[:10]]
+                    if weibo_contents:
+                        content_details.append("微博动态:")
+                        for content in weibo_contents:
+                            content_details.append(f"  - {content}")
+                
+                if content_details:
+                    # 使用单个日志条目输出所有内容，避免重复
+                    content_str = "\n".join(content_details)
+                    logger.info(f"[{lanlan_name}] 成功获取个性化内容:\n{content_str}")
+                else:
+                    logger.info(f"[{lanlan_name}] 成功获取个性化内容 - 但未获取到具体内容")
+                
+            except Exception:
+                logger.exception(f"[{lanlan_name}] 获取个性化内容失败")
+                return JSONResponse({
+                    "success": False,
+                    "error": "获取个性化内容时出错",
+                    "detail": "请检查网络连接或Cookie配置"
+                }, status_code=500)
+        
+        elif use_screenshot:
+            # 截图模式已经处理过，跳过
+            pass
+            
+        elif use_window_search:
+            # 窗口搜索模式已经处理过，跳过
+            pass
+            
+        else:
+            # 首页推荐主动对话（默认模式）
+            try:
+                trending_content = await fetch_public_content(bilibili_limit=10, weibo_limit=10)
                 
                 if not trending_content['success']:
                     return JSONResponse({
@@ -824,7 +889,7 @@ async def proactive_chat(request: Request):
                         "detail": trending_content.get('error', '未知错误')
                     }, status_code=500)
                 
-                formatted_content = format_trending_content(trending_content)
+                formatted_content = format_public_content(trending_content)
                 
                 # 显示具体的首页推荐内容详情
                 content_details = []
@@ -848,9 +913,9 @@ async def proactive_chat(request: Request):
                             content_details.append(f"  - {word}")
                 
                 if content_details:
-                    logger.info(f"[{lanlan_name}] 成功获取首页推荐:")
-                    for detail in content_details:
-                        logger.info(detail)
+                    # 使用单个日志条目输出所有内容，避免重复
+                    content_str = "\n".join(content_details)
+                    logger.info(f"[{lanlan_name}] 成功获取首页推荐:\n{content_str}")
                 else:
                     logger.info(f"[{lanlan_name}] 成功获取首页推荐 - 但未获取到具体内容")
                 
@@ -900,6 +965,17 @@ async def proactive_chat(request: Request):
                 memory_context=memory_context
             )
             logger.info(f"[{lanlan_name}] 使用窗口搜索进行主动对话")
+        
+        elif use_personal_dynamic:
+            # 个人动态模板：基于用户个人动态让AI决定是否主动发起对话
+            system_prompt = get_proactive_chat_prompt('personal', proactive_lang).format(
+                lanlan_name=lanlan_name,
+                master_name=master_name_current,
+                personal_dynamic=formatted_content,
+                memory_context=memory_context
+            )
+            logger.info(f"[{lanlan_name}] 使用个人动态进行主动对话")
+
         else:
             # 首页推荐模板：基于首页信息流让AI决定是否主动发起对话
             system_prompt = get_proactive_chat_prompt('home', proactive_lang).format(
@@ -1286,3 +1362,43 @@ async def translate_text_api(request: Request):
             "source_lang": "unknown",
             "target_lang": "zh"
         }
+        
+@router.post('/personal_dynamics')
+async def get_personal_dynamics(request: Request):
+    """获取个性化内容数据"""
+    try:
+        from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics
+        
+        data = await request.json()
+        lanlan_name = data.get('lanlan_name')
+        limit = data.get('limit', 10)
+        
+        # 获取个性化内容
+        personal_content = await fetch_personal_dynamics(limit=limit)
+        
+        if not personal_content['success']:
+            return JSONResponse({
+                "success": False,
+                "error": "无法获取个性化内容",
+                "detail": personal_content.get('error', '未知错误')
+            }, status_code=500)
+        
+        # 格式化内容用于前端显示
+        formatted_content = format_personal_dynamics(personal_content)
+        
+        return JSONResponse({
+            "success": True,
+            "data": {
+                "raw": personal_content,
+                "formatted": formatted_content,
+                "platforms": list(personal_content.keys())
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取个性化内容失败: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": "服务器内部错误",
+            "detail": str(e)
+        }, status_code=500)

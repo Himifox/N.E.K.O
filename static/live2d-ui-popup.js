@@ -84,7 +84,7 @@ Live2DManager.prototype._createSettingsPopupContent = function (popup) {
         { id: 'merge-messages', label: window.t ? window.t('settings.toggles.mergeMessages') : '合并消息', labelKey: 'settings.toggles.mergeMessages' },
         { id: 'focus-mode', label: window.t ? window.t('settings.toggles.allowInterrupt') : '允许打断', labelKey: 'settings.toggles.allowInterrupt', storageKey: 'focusModeEnabled', inverted: true }, // inverted表示值与focusModeEnabled相反
         { id: 'proactive-chat', label: window.t ? window.t('settings.toggles.proactiveChat') : '主动搭话', labelKey: 'settings.toggles.proactiveChat', storageKey: 'proactiveChatEnabled', hasInterval: true, intervalKey: 'proactiveChatInterval', defaultInterval: 30 },
-        { id: 'proactive-vision', label: window.t ? window.t('settings.toggles.proactiveVision') : '自主视觉', labelKey: 'settings.toggles.proactiveVision', storageKey: 'proactiveVisionEnabled', hasInterval: true, intervalKey: 'proactiveVisionInterval', defaultInterval: 15 }
+        { id: 'proactive-vision', label: window.t ? window.t('settings.toggles.proactiveVision') : '自主视觉', labelKey: 'settings.toggles.proactiveVision', storageKey: 'proactiveVisionEnabled', hasInterval: true, intervalKey: 'proactiveVisionInterval', defaultInterval: 15 },
     ];
 
     settingsToggles.forEach(toggle => {
@@ -95,23 +95,48 @@ Live2DManager.prototype._createSettingsPopupContent = function (popup) {
         if (toggle.hasInterval) {
             const intervalControl = this._createIntervalControl(toggle);
             popup.appendChild(intervalControl);
+            
+            let authPageLink = null;
 
-            // 鼠标悬停时展开间隔控件
-            toggleItem.addEventListener('mouseenter', () => {
+            if (toggle.id === 'proactive-chat') {
+                authPageLink = this._createSettingsLinkItem({
+                    id: 'auth-page',
+                    label: '配置媒体凭证',
+                    icon: '/static/icons/cookies_icon.png', // 确保该图标文件存在
+                    action: 'navigate',
+                    url: '/api/auth/page'
+                });
+                popup.appendChild(authPageLink);
+            }
+
+            // 重写悬停逻辑，让 开关本身、滑动条、凭证按钮 三个元素同步展开和收缩
+            const expandAll = () => {
                 intervalControl._expand();
-            });
-            toggleItem.addEventListener('mouseleave', (e) => {
-                // 如果鼠标移动到间隔控件上，不收缩
-                if (!intervalControl.contains(e.relatedTarget)) {
+                if (authPageLink) authPageLink._expand();
+            };
+
+            const collapseAll = (e) => {
+                const target = e.relatedTarget;
+                const isInsideToggle = toggleItem.contains(target);
+                const isInsideInterval = intervalControl.contains(target);
+                const isInsideAuth = authPageLink ? authPageLink.contains(target) : false;
+
+                // 只有当鼠标完全离开这三个元素的区域时，才收拢
+                if (!isInsideToggle && !isInsideInterval && !isInsideAuth) {
                     intervalControl._collapse();
+                    if (authPageLink) authPageLink._collapse();
                 }
-            });
-            intervalControl.addEventListener('mouseenter', () => {
-                intervalControl._expand();
-            });
-            intervalControl.addEventListener('mouseleave', () => {
-                intervalControl._collapse();
-            });
+            };
+
+            // 绑定事件到所有相关元素
+            toggleItem.addEventListener('mouseenter', expandAll);
+            toggleItem.addEventListener('mouseleave', collapseAll);
+            intervalControl.addEventListener('mouseenter', expandAll);
+            intervalControl.addEventListener('mouseleave', collapseAll);
+            if (authPageLink) {
+                authPageLink.addEventListener('mouseenter', expandAll);
+                authPageLink.addEventListener('mouseleave', collapseAll);
+            }
         }
     });
 
@@ -249,6 +274,67 @@ Live2DManager.prototype._createIntervalControl = function (toggle) {
     };
 
     return container;
+};
+
+// 创建带缩进的导航链接项（对齐“基础间隔”列）
+Live2DManager.prototype._createSettingsLinkItem = function (item) {
+    const linkItem = document.createElement('div');
+    Object.assign(linkItem.style, {
+        display: 'none', // 初始隐藏
+        alignItems: 'center',
+        gap: '8px',
+        padding: '0 12px 0 44px', // 关键：44px 缩进对齐“基础间隔”文字
+        fontSize: '11px',
+        color: '#666',
+        height: '0',
+        overflow: 'hidden',
+        opacity: '0',
+        cursor: 'pointer',
+        borderRadius: '6px',
+        transition: 'height 0.2s ease, opacity 0.2s ease, background 0.2s ease'
+    });
+
+    if (item.icon) {
+        const icon = document.createElement('img');
+        icon.src = item.icon;
+        Object.assign(icon.style, { width: '14px', height: '14px', objectFit: 'contain', opacity: '0.6' });
+        linkItem.appendChild(icon);
+    }
+
+    const label = document.createElement('span');
+    label.textContent = item.label;
+    linkItem.appendChild(label);
+
+    // 交互与跳转逻辑
+    linkItem.addEventListener('mouseenter', () => { 
+        linkItem.style.background = 'rgba(68, 183, 254, 0.1)';
+        linkItem.style.color = '#44b7fe';
+    });
+    linkItem.addEventListener('mouseleave', () => { 
+        linkItem.style.background = 'transparent';
+        linkItem.style.color = '#666';
+    });
+    linkItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.openOrFocusWindow(item.url, `neko_${item.id}`);
+    });
+
+    // 动画方法
+    linkItem._expand = () => {
+        linkItem.style.display = 'flex';
+        requestAnimationFrame(() => {
+            linkItem.style.height = '24px';
+            linkItem.style.opacity = '1';
+            linkItem.style.paddingBottom = '8px';
+        });
+    };
+    linkItem._collapse = () => {
+        linkItem.style.height = '0';
+        linkItem.style.opacity = '0';
+        setTimeout(() => { if (linkItem.style.opacity === '0') linkItem.style.display = 'none'; }, 200);
+    };
+
+    return linkItem;
 };
 
 // 创建Agent开关项

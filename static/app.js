@@ -1,4 +1,6 @@
 // 全局窗口管理函数
+// 上次用户输入时间（毫秒级）
+let lastUserInputTime = 0;
 // 关闭所有已打开的设置窗口（弹窗）
 window.closeAllSettingsWindows = function () {
     // 关闭 app.js 中跟踪的窗口
@@ -980,12 +982,6 @@ function init_app() {
                         muteButton.click();
 
                         // 显示提示信息
-                        showStatusToast(response.message || (window.t ? window.t('app.autoMuteTimeout') : '长时间无语音输入，已自动关闭麦克风'), 4000);
-                    } else {
-                        // isRecording 为 false 时，也需要同步按钮状态
-                        micButton.classList.remove('active');
-                        micButton.classList.remove('recording');
-                        syncFloatingMicButtonState(false);
                         showStatusToast(response.message || (window.t ? window.t('app.autoMuteTimeout') : '长时间无语音输入，已自动关闭麦克风'), 4000);
                     }
                 } else if (response.type === 'repetition_warning') {
@@ -2507,24 +2503,6 @@ function init_app() {
     async function stopMicCapture() { // 闭麦，按钮on click
         isSwitchingMode = true; // 开始模式切换（从语音切换到待机/文本模式）
 
-        // 隐藏语音准备提示（防止残留）
-        hideVoicePreparingToast();
-
-        // 清理 session Promise 相关状态（防止影响后续会话）
-        if (window.sessionTimeoutId) {
-            clearTimeout(window.sessionTimeoutId);
-            window.sessionTimeoutId = null;
-        }
-        if (sessionStartedRejecter) {
-            try {
-                sessionStartedRejecter(new Error('Session aborted'));
-            } catch (e) { /* ignore already handled */ }
-            sessionStartedRejecter = null;
-        }
-        if (sessionStartedResolver) {
-            sessionStartedResolver = null;
-        }
-
         // 停止录音时移除录音状态类
         micButton.classList.remove('recording');
 
@@ -3010,18 +2988,15 @@ function init_app() {
 
     // 同步浮动麦克风按钮状态的辅助函数
     function syncFloatingMicButtonState(isActive) {
-        // 更新所有存在的 manager 的按钮状态
-        const managers = [window.live2dManager, window.vrmManager];
-
-        for (const manager of managers) {
-            if (manager && manager._floatingButtons && manager._floatingButtons.mic) {
-                const { button, imgOff, imgOn } = manager._floatingButtons.mic;
-                if (button) {
-                    button.dataset.active = isActive ? 'true' : 'false';
-                    if (imgOff && imgOn) {
-                        imgOff.style.opacity = isActive ? '0' : '1';
-                        imgOn.style.opacity = isActive ? '1' : '0';
-                    }
+        if (window.live2dManager && window.live2dManager._floatingButtons && window.live2dManager._floatingButtons.mic) {
+            const floatingMicBtn = window.live2dManager._floatingButtons.mic.button;
+            if (floatingMicBtn) {
+                floatingMicBtn.dataset.active = isActive ? 'true' : 'false';
+                const imgOff = window.live2dManager._floatingButtons.mic.imgOff;
+                const imgOn = window.live2dManager._floatingButtons.mic.imgOn;
+                if (imgOff && imgOn) {
+                    imgOff.style.opacity = isActive ? '0' : '1';
+                    imgOn.style.opacity = isActive ? '1' : '0';
                 }
             }
         }
@@ -3029,18 +3004,15 @@ function init_app() {
 
     // 同步浮动屏幕分享按钮状态的辅助函数
     function syncFloatingScreenButtonState(isActive) {
-        // 更新所有存在的 manager 的按钮状态
-        const managers = [window.live2dManager, window.vrmManager];
-
-        for (const manager of managers) {
-            if (manager && manager._floatingButtons && manager._floatingButtons.screen) {
-                const { button, imgOff, imgOn } = manager._floatingButtons.screen;
-                if (button) {
-                    button.dataset.active = isActive ? 'true' : 'false';
-                    if (imgOff && imgOn) {
-                        imgOff.style.opacity = isActive ? '0' : '1';
-                        imgOn.style.opacity = isActive ? '1' : '0';
-                    }
+        if (window.live2dManager && window.live2dManager._floatingButtons && window.live2dManager._floatingButtons.screen) {
+            const floatingScreenBtn = window.live2dManager._floatingButtons.screen.button;
+            if (floatingScreenBtn) {
+                floatingScreenBtn.dataset.active = isActive ? 'true' : 'false';
+                const imgOff = window.live2dManager._floatingButtons.screen.imgOff;
+                const imgOn = window.live2dManager._floatingButtons.screen.imgOn;
+                if (imgOff && imgOn) {
+                    imgOff.style.opacity = isActive ? '0' : '1';
+                    imgOn.style.opacity = isActive ? '1' : '0';
                 }
             }
         }
@@ -4140,18 +4112,10 @@ function init_app() {
         isRecording = false;
         window.isRecording = false;
         window.currentGeminiMessage = null;
-
+        
         // 重置语音模式用户转录合并追踪
         lastVoiceUserMessage = null;
         lastVoiceUserMessageTime = 0;
-
-        // 清理 AI 回复相关的队列和缓冲区（防止影响后续会话）
-        window._realisticGeminiQueue = [];
-        window._realisticGeminiBuffer = '';
-        window._geminiTurnFullText = '';
-        window._realisticGeminiVersion = (window._realisticGeminiVersion || 0) + 1;
-        window.currentTurnGeminiBubbles = [];
-        window._isProcessingRealisticQueue = false;
 
         // 停止静音检测
         stopSilenceDetection();
@@ -4174,10 +4138,10 @@ function init_app() {
             workletNode = null;
         }
 
-        // 通知服务器结束会话
+        // 通知服务器暂停会话
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
-                action: 'end_session'
+                action: 'pause_session'
             }));
         }
         // statusElement.textContent = '录制已停止';
@@ -7929,19 +7893,44 @@ function init_app() {
         }, delay);
     }
 
+    // 获取个人媒体cookies所有可用平台的函数
+    async function getAvailablePersonalPlatforms() {
+        try {
+            const response = await fetch('/api/auth/cookies/status');
+            if (!response.ok) return [];
+            
+            const result = await response.json();
+            let availablePlatforms = [];
+            
+            if (result.success && result.data) {
+                for (const [platform, info] of Object.entries(result.data)) {
+                    if (platform !== 'platforms' && info.has_cookies) {
+                        availablePlatforms.push(platform);
+                    }
+                }
+            }
+            return availablePlatforms;
+        } catch (error) {
+            console.error('获取可用平台列表失败:', error);
+            return [];
+        }
+    }
+
     async function triggerProactiveChat() {
         try {
-            // 根据模式决定使用哪种搭话方式
-            // Windows系统下支持三种模式：截图、窗口标题搜索、热门内容
-            // 非Windows系统下只支持截图和热门内容
             let useScreenshot = false;
             let useWindowTitle = false;
+            let usePersonalDynamic = false;
             const isWindows = isWindowsOS();
 
+            // 直接通过可用平台列表判断是否有个人动态
+            const availablePlatforms = await getAvailablePersonalPlatforms();
+            const personalDynamicAvailable = availablePlatforms.length > 0;
+            
+            console.log(`个人动态可用状态: ${personalDynamicAvailable}, 可用平台: ${availablePlatforms.join(', ')}`);
+
             if (proactiveChatEnabled && proactiveVisionEnabled) {
-                // 两个都开启时：
-                // Windows: 1/3截图, 1/3窗口标题, 1/3热门内容
-                // 非Windows: 50%截图, 50%热门内容
+                // 双开模式
                 if (isWindows) {
                     const rand = Math.random();
                     if (rand < 0.33) {
@@ -7951,32 +7940,44 @@ function init_app() {
                         useWindowTitle = true;
                         console.log('主动搭话模式：双开模式(Windows)，使用窗口标题搭话');
                     } else {
-                        console.log('主动搭话模式：双开模式(Windows)，使用热门内容');
+                        // 剩下的 34% 概率，在个人动态和热门内容之间五五开
+                        if (personalDynamicAvailable && Math.random() < 0.5) {
+                            usePersonalDynamic = true;
+                            console.log('主动搭话模式：双开模式(Windows)，使用个人动态搭话');
+                        } else {
+                            console.log('主动搭话模式：双开模式(Windows)，使用热门内容搭话');
+                        }
                     }
                 } else {
                     useScreenshot = Math.random() < 0.5;
-                    console.log(`主动搭话模式：双开模式，使用${useScreenshot ? '截图搭话' : '热门内容'}`);
+                    console.log(`主动搭话模式：双开模式(非Windows)，使用${useScreenshot ? '截图搭话' : '热门内容'}`);
                 }
             } else if (proactiveVisionEnabled) {
-                // 只开启主动视觉时：
-                // Windows和非Windows都是100%截图
+                // 仅开启视觉
                 useScreenshot = true;
                 console.log('主动搭话模式：仅视觉模式，使用截图搭话');
             } else if (proactiveChatEnabled && isWindows) {
-                // 只开启主动搭话时(Windows)：50%窗口标题, 50%热门内容
-                if (Math.random() < 0.5) {
+
+                //仅搭话模式(Windows)：加入个人动态的触发概率
+                const rand = Math.random();
+                if (rand < 0.33) {
                     useWindowTitle = true;
                     console.log('主动搭话模式：仅搭话模式(Windows)，使用窗口标题搭话');
+                } else if (rand < 0.66 && personalDynamicAvailable) {
+                    usePersonalDynamic = true;
+                    console.log('主动搭话模式：仅搭话模式(Windows)，使用个人动态搭话');
                 } else {
-                    console.log('主动搭话模式：仅搭话模式(Windows)，使用热门内容');
+                    console.log('主动搭话模式：仅搭话模式(Windows)，使用热门内容搭话');
                 }
             } else if (proactiveChatEnabled) {
-                // 只开启主动搭话时(非Windows)：100%热门内容
-                useScreenshot = false;
-                useWindowTitle = false;
-                console.log('主动搭话模式：仅搭话模式，使用热门内容');
+                // 仅搭话模式(非Windows)：加入个人动态的触发概率
+                if (personalDynamicAvailable && Math.random() < 0.5) {
+                    usePersonalDynamic = true;
+                    console.log('主动搭话模式：仅搭话模式(非Windows)，使用个人动态搭话');
+                } else {
+                    console.log('主动搭话模式：仅搭话模式(非Windows)，使用热门内容搭话');
+                }
             } else {
-                // 两个都关闭，不执行搭话
                 console.log('主动搭话模式：两个功能都关闭，跳过本次搭话');
                 return;
             }
@@ -7985,24 +7986,23 @@ function init_app() {
                 lanlan_name: lanlan_config.lanlan_name
             };
 
-            if (useScreenshot) {
-                // 使用截图搭话
-                const screenshotDataUrl = await captureProactiveChatScreenshot();
+            // 动态注入个人动态标志
+            if (usePersonalDynamic) {
+                requestBody.use_personal_dynamic = true;
+            }
 
+            if (useScreenshot) {
+                const screenshotDataUrl = await captureProactiveChatScreenshot();
                 if (!screenshotDataUrl) {
                     console.log('主动搭话截图失败，退回使用其他方式');
-                    // 截图失败时的回退策略
                     if (isWindows && proactiveChatEnabled) {
-                        // Windows下回退到窗口标题
                         useScreenshot = false;
                         useWindowTitle = true;
                         console.log('已切换到窗口标题搭话模式');
                     } else if (proactiveChatEnabled) {
-                        // 非Windows或不支持窗口标题时回退到热门内容
                         useScreenshot = false;
                         console.log('已切换到热门内容搭话模式');
                     } else {
-                        // 如果只开启了主动视觉，没有开启主动搭话，则跳过本次搭话
                         console.log('主动视觉截图失败且未开启主动搭话，跳过本次搭话');
                         return;
                     }
@@ -8011,13 +8011,12 @@ function init_app() {
                 }
             }
 
-            if (useWindowTitle && !useScreenshot) {
-                // 使用窗口标题搭话（Windows only）
+            // Windows互斥保护
+            if (useWindowTitle && !useScreenshot && !usePersonalDynamic) {
                 try {
                     const titleResponse = await fetch('/api/get_window_title');
                     const titleResult = await titleResponse.json();
 
-                    // await 期间用户可能关闭了功能，避免继续执行
                     if (!proactiveChatEnabled && !proactiveVisionEnabled) {
                         console.log('功能已关闭，取消本次搭话');
                         return;
@@ -8056,30 +8055,39 @@ function init_app() {
                 body: JSON.stringify(requestBody)
             });
 
-            const result = await response.json();
-
-            if (result.success) {
-                if (result.action === 'chat') {
-                    // 检测用户是否在20秒内有过输入
-                    const timeSinceLastInput = Date.now() - lastUserInputTime;
-                    if (timeSinceLastInput < 20000) {
-                        console.log(`主动搭话作废：用户在${Math.round(timeSinceLastInput / 1000)}秒前有过输入`);
-                        return;
-                    }
-
-                    console.log('主动搭话已发送:', result.message);
-                    // 后端会直接通过session发送消息和TTS，前端无需处理显示
-                } else if (result.action === 'pass') {
-                    console.log('AI选择不搭话');
+        const result = await response.json();
+        
+        if (result.success) {
+            if (result.action === 'chat') {
+                // 检测用户是否在20秒内有过输入
+                const timeSinceLastInput = Date.now() - lastUserInputTime;
+                if (timeSinceLastInput < 20000) {
+                    console.log(`主动搭话作废：用户在${Math.round(timeSinceLastInput / 1000)}秒前有过输入`);
+                    return;
                 }
-            } else {
-                console.warn('主动搭话失败:', result.error);
-            }
-        } catch (error) {
-            console.error('主动搭话触发失败:', error);
-        }
-    }
 
+                console.log('主动搭话已发送:', result.message);
+                // 后端会直接通过session发送消息和TTS，前端无需处理显示
+            } else if (result.action === 'pass') {
+                console.log('AI选择不搭话');
+            }
+        } else {
+            // 【必要修改 3】：统一变量名为 usePersonalDynamic。加上括号确保逻辑严谨 (result.error.includes('cookies') || result.error.includes('Cookie'))
+            if (usePersonalDynamic && result.error && (result.error.includes('cookies') || result.error.includes('Cookie'))) {
+                console.warn('个人动态调用失败（可能缺少cookies），尝试回退到其他模式:');
+                //显示错误详情
+                showCookieWarningNotification();
+                // 尝试回退到其他模式
+                await retryWithFallbackModes(isWindows, proactiveChatEnabled, proactiveVisionEnabled, lanlan_config.lanlan_name);
+                return;
+            } else {
+                console.error('主动搭话失败:', result.error);
+            }
+        }
+    } catch (error) {
+        console.error('主动搭话触发失败:', error);
+    }
+}
     function resetProactiveChatBackoff() {
         // 重置退避级别
         proactiveChatBackoffLevel = 0;
