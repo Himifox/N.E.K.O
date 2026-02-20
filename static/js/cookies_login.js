@@ -211,6 +211,12 @@ async function deleteCookie(platformKey) {
         if (data.success) {
             refreshStatusList();
             showAlert(true, `✅ 已清空`);
+         }else{
+            showAlert(false, data.message || '删除失败');
         }
-    } catch (error) {}
+    }catch(error){
+        //加错误提示
+        showAlert(false, '删除失败，请检查服务状态');
+        console.error('删除出错', error);
+    }
 }
