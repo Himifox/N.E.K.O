@@ -1254,14 +1254,13 @@ async def translate_text_api(request: Request):
             "target_lang": "zh"
         }
         
-@router.post('/personal_dynamics')
+`@router.post`('/personal_dynamics')
 async def get_personal_dynamics(request: Request):
     """获取个性化内容数据"""
     try:
         from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics
         
         data = await request.json()
-        lanlan_name = data.get('lanlan_name')
         limit = data.get('limit', 10)
         
         # 获取个性化内容
@@ -1282,7 +1281,7 @@ async def get_personal_dynamics(request: Request):
             "data": {
                 "raw": personal_content,
                 "formatted": formatted_content,
-                "platforms": list(personal_content.keys())
+                "platforms": [k for k in personal_content.keys() if k not in ('success', 'error')]
             }
         })
         
