@@ -747,7 +747,7 @@ async def proactive_chat(request: Request):
         use_personal_dynamic = data.get('use_personal_dynamic', False)
 
         # 前端已经根据三种模式决定是否使用截图
-        use_screenshot = has_screenshot and not use_window_search
+        use_screenshot = has_screenshot and not use_window_search and not use_personal_dynamic
         
         if use_window_search:
             logger.info(f"[{lanlan_name}] 前端选择使用窗口搜索进行主动搭话")
