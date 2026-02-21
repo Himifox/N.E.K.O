@@ -79,7 +79,7 @@ function switchTab(platformKey, btnElement) {
     const descBox = document.getElementById('panel-desc');
     if (descBox) {
         descBox.style.borderColor = config.theme;
-        descBox.innerHTML = config.instruction;
+        descBox.innerHTML = DOMPurify.sanitize(config.instruction);
     }
 
     // 渲染动态字段
@@ -257,7 +257,7 @@ function showAlert(success, message) {
     alertEl.style.backgroundColor = success ? '#ecfdf5' : '#fef2f2';
     alertEl.style.color = success ? '#059669' : '#dc2626';
     alertEl.style.borderColor = success ? '#a7f3d0' : '#fecaca';
-    alertEl.innerHTML = message; 
+    alertEl.textContent = message; 
 
     alertTimeout = setTimeout(() => {
         alertEl.style.display = 'none';

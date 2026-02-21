@@ -267,6 +267,34 @@ def _log_trending_content(lanlan_name: str, trending_content: dict):
     else:
         logger.info(f"[{lanlan_name}] 成功获取首页推荐 - 但未获取到具体内容")
 
+def _log_personal_dynamics(lanlan_name: str, personal_content: dict):
+    """记录个人动态内容获取详情"""
+    content_details = []
+    
+    bilibili_dynamic = personal_content.get('bilibili_dynamic', {})
+    if bilibili_dynamic.get('success'):
+        dynamics = bilibili_dynamic.get('dynamics', [])
+        bilibili_contents = [dynamic.get('content', dynamic.get('title', '')) for dynamic in dynamics[:5]]
+        if bilibili_contents:
+            content_details.append("B站动态:")
+            for content in bilibili_contents:
+                content_details.append(f"  - {content}")
+    
+    weibo_dynamic = personal_content.get('weibo_dynamic', {})
+    if weibo_dynamic.get('success'):
+        dynamics = weibo_dynamic.get('statuses', [])
+        weibo_contents = [dynamic.get('content', '') for dynamic in dynamics[:5]]
+        if weibo_contents:
+            content_details.append("微博动态:")
+            for content in weibo_contents:
+                content_details.append(f"  - {content}")
+                
+    if content_details:
+        logger.info(f"[{lanlan_name}] 成功获取个人动态:")
+        for detail in content_details:
+            logger.info(detail)
+    else:
+        logger.info(f"[{lanlan_name}] 成功获取个人动态 - 但未获取到具体内容")
 
 @router.post('/emotion/analysis')
 async def emotion_analysis(request: Request):
@@ -931,13 +959,12 @@ async def proactive_chat(request: Request):
         _config_manager = get_config_manager()
         session_manager = get_session_manager()
         from utils.web_scraper import (
-            fetch_public_content, format_public_content,
             fetch_window_context_content, format_window_context_content,
             fetch_video_content, format_video_content,
-            fetch_news_content, format_news_content
+            fetch_news_content, format_news_content,
+            fetch_personal_dynamics, format_personal_dynamics
         )
         from config.prompts_sys import get_proactive_screen_prompt, get_proactive_generate_prompt, get_proactive_chat_rewrite_prompt
-        from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics # 增加个人动态
         # 获取当前角色数据（包括完整人设）
         master_name_current, her_name_current, _, _, _, lanlan_prompt_map, _, _, _, _ = _config_manager.get_character_data()
         
@@ -973,6 +1000,8 @@ async def proactive_chat(request: Request):
                 enabled_modes = ['news']
             elif content_type == 'video':
                 enabled_modes = ['video']
+            elif data.get('use_personal_dynamic', False):
+                enabled_modes = ['personal']
             else:
                 enabled_modes = ['home']
         
@@ -1031,6 +1060,15 @@ async def proactive_chat(request: Request):
                 _log_trending_content(lanlan_name, trending_content)
                 links = _extract_links_from_raw(mode, trending_content)
                 return (mode, {'formatted_content': formatted, 'raw_data': trending_content, 'links': links})
+
+            elif mode == 'personal':
+                personal_dynamics = await fetch_personal_dynamics(limit=10)
+                if not personal_dynamics['success']:
+                    raise ValueError(f"获取个人动态失败: {personal_dynamics.get('error')}")
+                formatted = format_personal_dynamics(personal_dynamics)
+                _log_personal_dynamics(lanlan_name, personal_dynamics)
+                links = _extract_links_from_raw(mode, personal_dynamics)
+                return (mode, {'formatted_content': formatted, 'raw_data': personal_dynamics, 'links': links})
             
             else:
                 raise ValueError(f"未知模式: {mode}")
@@ -1179,7 +1217,7 @@ async def proactive_chat(request: Request):
             parts = []
             for m in web_modes:
                 src = sources[m]
-                label_map = {'news': '热议话题', 'video': '视频推荐', 'home': '首页推荐', 'window': '窗口上下文'}
+                label_map = {'news': '热议话题', 'video': '视频推荐', 'home': '首页推荐', 'window': '窗口上下文', 'personal': '个人动态'}
                 label = label_map.get(m, m)
                 content_text = src.get('formatted_content', '')
                 if content_text:
@@ -1442,79 +1480,13 @@ async def translate_text_api(request: Request):
             "target_lang": "zh"
         }
 
-# ==========================================
-# 
 # ========== 个性化内容接口 ==========
- # 检查是否使用个性化内容模式
-        use_personal_dynamic = data.get('use_personal_dynamic', False)
-        
- # 根据不同模式获取内容
-        if use_personal_dynamic:
-            # 个性化内容主动对话
-            try:
-                personal_content = await fetch_personal_dynamics(limit=10)
-                
-                if not personal_content['success']:
-                    return JSONResponse({
-                        "success": False,
-                        "error": "无法获取个性化内容",
-                        "detail": personal_content.get('error', '未知错误')
-                    }, status_code=500)
-                
-                formatted_content = format_personal_dynamics(personal_content)
-                
-                # 显示具体的个性化内容详情
-                content_details = []
-                
-                # 数据结构引用：个人动态数据存储在 bilibili_dynamic 和 weibo_dynamic 字段中
-                bilibili_dynamic = personal_content.get('bilibili_dynamic', {})
-                if bilibili_dynamic.get('success'):
-                    dynamics = bilibili_dynamic.get('dynamics', [])
-                    bilibili_contents = [dynamic.get('content', dynamic.get('title', '')) for dynamic in dynamics[:10]]
-                    if bilibili_contents:
-                        content_details.append("B站动态:")
-                        for content in bilibili_contents:
-                            content_details.append(f"  - {content}")
-                
-                weibo_dynamic = personal_content.get('weibo_dynamic', {})
-                if weibo_dynamic.get('success'):
-                    dynamics = weibo_dynamic.get('statuses', [])
-                    weibo_contents = [dynamic.get('content', '') for dynamic in dynamics[:10]]
-                    if weibo_contents:
-                        content_details.append("微博动态:")
-                        for content in weibo_contents:
-                            content_details.append(f"  - {content}")
-                
-                if content_details:
-                    # 使用单个日志条目输出所有内容，避免重复
-                    content_str = "\n".join(content_details)
-                    logger.info(f"[{lanlan_name}] 成功获取个性化内容:\n{content_str}")
-                else:
-                    logger.info(f"[{lanlan_name}] 成功获取个性化内容 - 但未获取到具体内容")
-                
-            except Exception:
-                logger.exception(f"[{lanlan_name}] 获取个性化内容失败")
-                return JSONResponse({
-                    "success": False,
-                    "error": "获取个性化内容时出错",
-                    "detail": "请检查网络连接或Cookie配置"
-                }, status_code=500)
-
-if use_personal_dynamic:
-            # 个人动态模板：基于用户个人动态让AI决定是否主动发起对话
-            system_prompt = get_proactive_chat_prompt('personal', proactive_lang).format(
-                lanlan_name=lanlan_name,
-                master_name=master_name_current,
-                personal_dynamic=formatted_content,
-                memory_context=memory_context
-            )
-            logger.info(f"[{lanlan_name}] 使用个人动态进行主动对话")
 
 @router.post('/personal_dynamics')
 async def get_personal_dynamics(request: Request):
     """获取个性化内容数据"""
+    from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics
     try:
-        from utils.web_scraper import fetch_personal_dynamics, format_personal_dynamics
         
         data = await request.json()
         limit = data.get('limit', 10)
