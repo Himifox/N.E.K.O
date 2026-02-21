@@ -329,6 +329,139 @@ Live2DManager.prototype._createIntervalControl = function (toggle) {
     return container;
 };
 
+// 创建可折叠的设置链接项（用于在开关展开时附带显示的导航入口，如"配置媒体凭证"）
+Live2DManager.prototype._createSettingsLinkItem = function (item, popup) {
+    const linkItem = document.createElement('div');
+    linkItem.id = `live2d-link-${item.id}`;
+    Object.assign(linkItem.style, {
+        display: 'none',   // 初始隐藏，由 _expand/_collapse 控制
+        alignItems: 'center',
+        gap: '6px',
+        padding: '0 12px 0 44px',
+        fontSize: '12px',
+        color: 'var(--neko-popup-text-sub, #666)',
+        height: '0',
+        overflow: 'hidden',
+        opacity: '0',
+        cursor: 'pointer',
+        borderRadius: '6px',
+        transition: 'height 0.2s ease, opacity 0.2s ease, padding 0.2s ease, background 0.2s ease'
+    });
+
+    // 图标（可选）
+    if (item.icon) {
+        const iconImg = document.createElement('img');
+        iconImg.src = item.icon;
+        iconImg.alt = item.label || '';
+        Object.assign(iconImg.style, {
+            width: '16px',
+            height: '16px',
+            objectFit: 'contain',
+            flexShrink: '0'
+        });
+        linkItem.appendChild(iconImg);
+    }
+
+    // 文字标签
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = item.label || '';
+    if (item.labelKey) {
+        labelSpan.setAttribute('data-i18n', item.labelKey);
+    }
+    Object.assign(labelSpan.style, {
+        flexShrink: '0',
+        fontSize: '11px',
+        userSelect: 'none'
+    });
+    linkItem.appendChild(labelSpan);
+
+    // 更新标签文本（i18n 动态刷新用）
+    if (item.labelKey) {
+        linkItem._updateLabelText = () => {
+            if (window.t) {
+                labelSpan.textContent = window.t(item.labelKey);
+                if (item.icon && linkItem.querySelector('img')) {
+                    linkItem.querySelector('img').alt = window.t(item.labelKey);
+                }
+            }
+        };
+    }
+
+    // 悬停效果
+    linkItem.addEventListener('mouseenter', () => {
+        linkItem.style.background = 'var(--neko-popup-hover, rgba(68,183,254,0.1))';
+    });
+    linkItem.addEventListener('mouseleave', () => {
+        linkItem.style.background = 'transparent';
+    });
+
+    // 点击导航
+    let isOpening = false;
+    linkItem.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isOpening) return;
+        if (item.action === 'navigate' && item.url) {
+            isOpening = true;
+            if (typeof window.openOrFocusWindow === 'function') {
+                window.openOrFocusWindow(item.url, `neko_${item.id}`);
+            } else {
+                window.open(item.url, `neko_${item.id}`);
+            }
+            setTimeout(() => { isOpening = false; }, 500);
+        }
+    });
+
+    // 展开/收缩方法（与 _createIntervalControl 保持相同约定）
+    linkItem._expand = () => {
+        linkItem.style.display = 'flex';
+        if (linkItem._expandTimeout) {
+            clearTimeout(linkItem._expandTimeout);
+            linkItem._expandTimeout = null;
+        }
+        if (linkItem._collapseTimeout) {
+            clearTimeout(linkItem._collapseTimeout);
+            linkItem._collapseTimeout = null;
+        }
+        requestAnimationFrame(() => {
+            const targetHeight = linkItem.scrollHeight || 28;
+            linkItem.style.height = targetHeight + 'px';
+            linkItem.style.opacity = '1';
+            linkItem.style.padding = '4px 12px 4px 44px';
+            linkItem._expandTimeout = setTimeout(() => {
+                if (linkItem.style.opacity === '1') {
+                    linkItem.style.height = 'auto';
+                }
+                linkItem._expandTimeout = null;
+            }, POPUP_ANIMATION_DURATION_MS);
+        });
+    };
+
+    linkItem._collapse = () => {
+        if (linkItem._expandTimeout) {
+            clearTimeout(linkItem._expandTimeout);
+            linkItem._expandTimeout = null;
+        }
+        if (linkItem._collapseTimeout) {
+            clearTimeout(linkItem._collapseTimeout);
+            linkItem._collapseTimeout = null;
+        }
+        linkItem.style.height = linkItem.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            linkItem.style.height = '0';
+            linkItem.style.opacity = '0';
+            linkItem.style.padding = '0 12px 0 44px';
+            linkItem._collapseTimeout = setTimeout(() => {
+                if (linkItem.style.opacity === '0') {
+                    linkItem.style.display = 'none';
+                }
+                linkItem._collapseTimeout = null;
+            }, POPUP_ANIMATION_DURATION_MS);
+        });
+    };
+
+    return linkItem;
+};
+
 // 创建圆形指示器和对勾的辅助方法（供 _createToggleItem 和 _createSettingsToggleItem 共用）
 Live2DManager.prototype._createCheckIndicator = function () {
     const indicator = document.createElement('div');

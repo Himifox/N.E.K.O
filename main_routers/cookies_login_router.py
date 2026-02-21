@@ -21,7 +21,8 @@ from utils.cookies_login import (
     save_cookies_to_file,
     load_cookies_from_file,
     parse_cookie_string,
-    COOKIE_FILES  # 确保此常量在 utils 中已定义
+    COOKIE_FILES,
+    CONFIG_DIR
 )
 
 logger = logging.getLogger("Main")
@@ -30,11 +31,6 @@ def verify_local_access(request: Request):
     """🛡️ 纵深防御：拦截非本地主机的越权访问尝试"""
     client_host = getattr(request.client, "host", None) if request.client else None
     
-    if not client_host:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            client_host = forwarded.split(",")[0].strip()
-            
     allowed_hosts = ["127.0.0.1", "::1", "localhost"]
     
     if client_host not in allowed_hosts:
@@ -65,7 +61,7 @@ class CookieSubmit(BaseModel):
             re.IGNORECASE
         )
         if suspicious_pattern.search(v):
-            logger.warning(f"🚨 检测到恶意内容注入尝试！内容: {v[:50]}...")
+            logger.warning(f"🚨 检测到恶意内容注入尝试！恶意内容注入，length={len(v)}")
             raise ValueError("检测到非法或危险字符，请求已被系统拦截。")
         return v
 
@@ -153,6 +149,23 @@ async def save_cookie(data: CookieSubmit):
         logger.debug(f"详细错误: {e}")  # debug 级别记录详情
         raise HTTPException(status_code=500, detail="内部服务器错误")
 
+@router.get("/cookies/status", summary="获取所有平台Cookie状态汇总")
+async def get_all_cookies_status():
+    """返回每个支持平台的 Cookie 存在状态（前端个人动态功能使用）"""
+    try:
+        platforms = login_manager.get_supported_platforms()
+        result = {}
+        for platform_key in platforms:
+            cookies = load_cookies_from_file(platform_key)
+            result[platform_key] = {
+                "has_cookies": bool(cookies),
+                "cookies_count": len(cookies) if cookies else 0,
+            }
+        return {"success": True, "data": result}
+    except Exception as e:
+        logger.error(f"获取所有平台Cookie状态失败: {e}")
+        raise HTTPException(status_code=500, detail="获取平台状态失败")
+
 @router.get("/cookies/{platform}", summary="获取平台Cookie状态")
 async def get_platform_cookies(platform: str):
     supported = login_manager.get_supported_platforms()
@@ -186,9 +199,6 @@ async def delete_platform_cookies(platform: str):
             
     try:
         cookie_file.unlink()
-
-        # 同时删除加密文件（如果存在）
-        from utils.cookies_login import CONFIG_DIR
         key_file = CONFIG_DIR / f"{platform}_key.key"
         if key_file.exists():
             key_file.unlink()
