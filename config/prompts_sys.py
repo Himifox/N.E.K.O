@@ -532,7 +532,7 @@ proactive_chat_prompt_personal_ko = """당신은 {lanlan_name}입니다. 지금 
 
 ======이하는 대화 기록입니다======
 {memory_context}
-======이상이 대화 기록입니다======
+======以上为对话历史======
 
 ======이하는 개인 소식 내용입니다======
 {personal_dynamic}
@@ -605,7 +605,7 @@ proactive_chat_prompt_ko = """당신은 {lanlan_name}입니다. 방금 홈 추�
 
 ======이하 대화 기록======
 {memory_context}
-======이상 대화 기록======
+======以上为对话历史======
 
 ======이하 홈 추천 콘텐츠======
 {trending_content}
@@ -627,7 +627,7 @@ proactive_chat_prompt_screenshot_ko = """당신은 {lanlan_name}입니다. 지�
 
 ======이하 대화 기록======
 {memory_context}
-======이상 대화 기록======
+======以上为对话历史======
 
 ======이하 현재 화면 내용======
 {screenshot_content}
@@ -649,7 +649,7 @@ proactive_chat_prompt_window_search_ko = """당신은 {lanlan_name}입니다. {m
 
 ======이하 대화 기록======
 {memory_context}
-======이상 대화 기록======
+======以上为对话历史======
 
 ======이하 {master_name}이 현재 관심 가지고 있는 내용======
 {window_context}
@@ -672,7 +672,7 @@ proactive_chat_prompt_news_ko = """당신은 {lanlan_name}입니다. 방금 화�
 
 ======이하 대화 기록======
 {memory_context}
-======이상 대화 기록======
+======以上为对话历史======
 
 ======이하 화제의 토픽======
 {trending_content}
@@ -694,7 +694,7 @@ proactive_chat_prompt_video_ko = """당신은 {lanlan_name}입니다. 방금 동
 
 ======이하 대화 기록======
 {memory_context}
-======이상 대화 기록======
+======以上为对话历史======
 
 ======이하 동영상 추천======
 {trending_content}
@@ -716,7 +716,7 @@ proactive_chat_rewrite_prompt_ko = """당신은 텍스트 정리 전문가입니
 
 ======이하 원본 출력======
 {raw_output}
-======이상 원본 출력======
+======以上为对话======
 
 규칙:
 1. '|' 문자를 제거하세요. '|'가 포함된 경우 마지막 '|' 뒤의 실제 발화 내용만 남기세요. 여러 턴이 있으면 첫 번째 부분만 남기세요.
@@ -882,7 +882,7 @@ proactive_generate_en = """Here is your persona:
 
 ======Chat History======
 {memory_context}
-======Chat History End======
+======以上为对话历史======
 
 {recent_chats_section}
 
@@ -938,7 +938,7 @@ proactive_generate_ko = """다음은 당신의 캐릭터 설정입니다:
 
 ======대화 기록======
 {memory_context}
-======대화 기록 끝======
+======以上为对话历史======
 
 {recent_chats_section}
 

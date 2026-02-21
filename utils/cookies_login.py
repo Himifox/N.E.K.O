@@ -13,13 +13,10 @@
 import asyncio
 import json
 import os
-import time
 import sys
-import webbrowser
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 from pathlib import Path
 import logging
-import httpx
 
 
 
@@ -50,8 +47,10 @@ class LoginStatus:
 # ==========================================
 def mask_string(s: str) -> str:
     """对敏感凭证进行打码处理，防止屏幕偷窥或日志泄露"""
-    if not s: return ""
-    if len(s) < 8: return "***"
+    if not s:
+        return ""
+    if len(s) < 8:
+        return "***"
     return f"{s[:4]}...{s[-4:]}"
 
 def validate_cookies(platform: str, cookies: Dict[str, str]) -> bool:
@@ -91,7 +90,6 @@ def save_cookies_to_file(platform: str, cookies: Dict[str, str], encrypt: bool =
         if encrypt:
             # 加密保存
             from cryptography.fernet import Fernet
-            import base64
             
             # 生成或加载加密密钥
             key_file = CONFIG_DIR / f"{platform}_key.key"
@@ -196,7 +194,8 @@ def load_cookies_from_file(platform: str) -> Dict[str, str]:
 def parse_cookie_string(cookie_string: str) -> Dict[str, str]:
     """解析纯文本 Cookie"""
     cookies = {}
-    if not cookie_string: return cookies
+    if not cookie_string:
+        return cookies
     for item in cookie_string.split(';'):
         if '=' in item:
             key, value = item.strip().split('=', 1)
@@ -205,61 +204,67 @@ def parse_cookie_string(cookie_string: str) -> Dict[str, str]:
 
  
 
-async def get_bilibili_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_bilibili_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【B站手动导入】(注意：请勿在此界面外泄露您的 SESSDATA)")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]") 
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('bilibili', cookies)
+    if cookies:
+        save_cookies_to_file('bilibili', cookies)
     return cookies
 
 # ==========================================
 # 其他平台登录逻辑 (纯手工导入)
 # ==========================================
-async def get_douyin_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_douyin_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【抖音手动导入】(需包含 sessionid 和 ttwid 字段)")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]")
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('douyin', cookies)
+    if cookies:
+        save_cookies_to_file('douyin', cookies)
     return cookies
 
-async def get_kuaishou_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_kuaishou_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【快手手动导入】(需包含 kuaishou.server.web_st 字段)")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]")
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('kuaishou', cookies)
+    if cookies:
+        save_cookies_to_file('kuaishou', cookies)
     return cookies
 
-async def get_weibo_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_weibo_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【微博手动导入】(需包含 SUB 字段)")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]")
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('weibo', cookies)
+    if cookies:
+        save_cookies_to_file('weibo', cookies)
     return cookies
 
-async def get_reddit_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_reddit_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【Reddit 手动导入】")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]")
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('reddit', cookies)
+    if cookies:
+        save_cookies_to_file('reddit', cookies)
     return cookies
 
-async def get_twitter_cookies(method: str = "manual") -> Optional[Dict[str, str]]:
+async def get_twitter_cookies(_method: str = "manual") -> Optional[Dict[str, str]]:
     print("\n" + "-" * 40)
     print("【Twitter/X 手动导入】")
     cookie_string = input("👉 请粘贴 Cookie: ").strip()
     print("\033[F\033[K" + "👉 请粘贴 Cookie: [已接收，已脱敏掩码]")
     cookies = parse_cookie_string(cookie_string)
-    if cookies: save_cookies_to_file('twitter', cookies)
+    if cookies:
+        save_cookies_to_file('twitter', cookies)
     return cookies
 
 # ==========================================
@@ -306,7 +311,8 @@ async def interactive_login():
         print("  [0] 退出程序")
         print("=" * 45)
         
-        choice = input("👉 请选择要配置的平台 (0-4): ").strip()
+        max_idx = len(platforms)
+        choice = input(f"👉 请选择要配置的平台 (0-{max_idx}): ").strip()
         if choice == "0":
             print("👋 凭证管理已安全退出。")
             break
@@ -326,7 +332,8 @@ async def interactive_login():
                         m_idx = int(m_choice) - 1
                         if 0 <= m_idx < len(p_info['methods']):
                             method = p_info['methods'][m_idx]
-                    except ValueError: pass
+                    except ValueError:
+                        pass
                 
                 print(f"\n🚀 正在启动 {p_info['name']} 的 {method} 安全流程...")
                 await manager.login_platform(p_key, method)

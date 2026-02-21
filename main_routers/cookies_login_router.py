@@ -8,7 +8,7 @@ unified logic for credential management.
 
 import logging
 import re
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Request, HTTPException, status
 from fastapi.responses import HTMLResponse
@@ -65,7 +65,7 @@ def validate_platform_fields(platform: str, cookies: Dict[str, str]):
     
     if platform in platform_validations:
         required = platform_validations[platform]
-        missing = [f for f in required if f not in cookies]
+        missing = [f for f in required if not cookies.get(f)]
         if missing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

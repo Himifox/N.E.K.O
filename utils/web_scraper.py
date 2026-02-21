@@ -2076,10 +2076,11 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
 
         if not isinstance(data, dict) or data.get("code") != 0:
             logger.error(f"获取B站动态失败，API返回: {data}")
-            return {'success': False, 'error': f"API请求失败"}
+            return {'success': False, 'error': "API请求失败"}
 
         def safe_dict(d: Any, key: str) -> dict:
-            if not isinstance(d, dict): return {}
+            if not isinstance(d, dict):
+                return {}
             v = d.get(key)
             return v if isinstance(v, dict) else {}
 
@@ -2088,7 +2089,8 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
         items = items.get("items", []) if isinstance(items, dict) else []
 
         for item in items:
-            if not isinstance(item, dict): continue
+            if not isinstance(item, dict):
+                continue
                 
             try:
                 dynamic_id = str(item.get("id_str", ""))
@@ -2153,7 +2155,8 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
                                     room_id = live_rcmd["live_play_info"].get("room_id")
                                     if room_id:
                                         specific_url = f"https://live.bilibili.com/{room_id}"
-                        except Exception: pass
+                        except Exception:
+                            pass
                         content = f"[正在直播] {live_title or '快来我的直播间看看吧！'}"
                         
                     case _:
@@ -2172,7 +2175,8 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
                             content = raw_text or "发布了新动态"
 
                 content = re.sub(r'\s+', ' ', content).strip()
-                if not content: content = "分享了新动态"
+                if not content:
+                    content = "分享了新动态"
 
                 final_content = f"UP主【{author}】: {content}"
 
@@ -2182,7 +2186,8 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
                     'url': specific_url,  # 使用具体类型的URL
                     'base_url': f"https://t.bilibili.com/{dynamic_id}"  # 保留原始动态页面链接
                 })
-                if len(dynamic_list) >= limit: break
+                if len(dynamic_list) >= limit:
+                    break
             except Exception as item_e:
                 logger.warning(f"解析单条动态失败，跳过: {item_e}, 动态ID: {item.get('id_str', '未知')}")
 
@@ -2348,7 +2353,8 @@ async def fetch_reddit_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
                 for item in data.get('data', {}).get('children', [])[:limit]
                 if not (pd := item.get('data', {})).get('over_18')
             ]
-            if posts: logger.info(f"✅ 成功获取到 {len(posts)} 条Reddit订阅帖子")
+            if posts:
+                logger.info(f"✅ 成功获取到 {len(posts)} 条Reddit订阅帖子")
             return {'success': True, 'posts': posts}
     except Exception as e: 
         return {'success': False, 'error': str(e)}
@@ -2409,7 +2415,10 @@ async def fetch_twitter_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
             logger.warning("Twitter Cookie 中缺少核心字段 ct0，极大可能触发风控拦截")
         
         # 官方 Web 客户端通用固化的 Bearer Token
-        bearer_token = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIyU2%2FGoa3FmBNYDPz%2FzGz%2F2Rnc%2F2bGBDH%2Fc'
+        bearer_token = os.environ.get("TWITTER_BEARER_TOKEN", "")
+        if not bearer_token:
+            logger.warning("Falling back to hardcoded Web client Bearer Token, consider configuring TWITTER_BEARER_TOKEN")
+            bearer_token = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIyU2%2FGoa3FmBNYDPz%2FzGz%2F2Rnc%2F2bGBDH%2Fc'
         
         # 切换到更稳定、包含完整推文文本的 v1.1 接口
         url = f"https://api.twitter.com/1.1/statuses/home_timeline.json?tweet_mode=extended&count={limit}"
@@ -2490,9 +2499,9 @@ async def fetch_personal_dynamics(limit: int = 10) -> Dict[str, Any]:
             b_dyn = {'success': False, 'error': str(b_dyn)} if isinstance(b_dyn, Exception) else b_dyn
             w_dyn = {'success': False, 'error': str(w_dyn)} if isinstance(w_dyn, Exception) else w_dyn
 
-            return {'success': True, 'region': 'china', 
-                    'bilibili_dynamic': b_dyn, 'weibo_dynamic': w_dyn, 
-              }
+            top_success = b_dyn.get('success', False) or w_dyn.get('success', False)
+            return {'success': top_success, 'region': 'china', 
+                    'bilibili_dynamic': b_dyn, 'weibo_dynamic': w_dyn}
         else:
             logger.info("检测到非中文区域，获取Reddit和Twitter个人动态")
             r_dyn, t_dyn = await asyncio.gather(
@@ -2502,7 +2511,9 @@ async def fetch_personal_dynamics(limit: int = 10) -> Dict[str, Any]:
             )
             r_dyn = {'success': False, 'error': str(r_dyn)} if isinstance(r_dyn, Exception) else r_dyn
             t_dyn = {'success': False, 'error': str(t_dyn)} if isinstance(t_dyn, Exception) else t_dyn
-            return {'success': True, 'region': 'non-china', 'reddit_dynamic': r_dyn, 'twitter_dynamic': t_dyn}
+            
+            top_success = r_dyn.get('success', False) or t_dyn.get('success', False)
+            return {'success': top_success, 'region': 'non-china', 'reddit_dynamic': r_dyn, 'twitter_dynamic': t_dyn}
     except Exception as e:
         logger.error(f"获取个人动态内容失败: {e}")
         return {'success': False, 'error': str(e)}
