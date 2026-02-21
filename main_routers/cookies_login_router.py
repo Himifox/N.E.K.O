@@ -27,6 +27,12 @@ from utils.cookies_login import (
 
 logger = logging.getLogger("Main")
 
+# 预编译恶意内容检测正则，避免每次请求时重复编译
+SUSPICIOUS_PATTERN = re.compile(
+    r'(<script|javascript:|onload=|eval\(|UNION SELECT|\.\./)',
+    re.IGNORECASE
+)
+
 def verify_local_access(request: Request):
     """🛡️ 纵深防御：拦截非本地主机的越权访问尝试"""
     client_host = getattr(request.client, "host", None) if request.client else None
@@ -56,11 +62,7 @@ class CookieSubmit(BaseModel):
     @classmethod
     def check_suspicious_patterns(cls, v: str) -> str:
         """安全加固：拦截 XSS 或 SQL 注入特征"""
-        suspicious_pattern = re.compile(
-            r'(<script|javascript:|onload=|eval\(|UNION SELECT|\.\./)', 
-            re.IGNORECASE
-        )
-        if suspicious_pattern.search(v):
+        if SUSPICIOUS_PATTERN.search(v):
             logger.warning(f"🚨 检测到恶意内容注入尝试！恶意内容注入，length={len(v)}")
             raise ValueError("检测到非法或危险字符，请求已被系统拦截。")
         return v
@@ -112,7 +114,7 @@ async def get_supported_platforms():
             }
         }
     except Exception as e:
-        logger.error(f"获取平台列表失败: {e}")
+        logger.error(f"获取平台列表失败: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="获取支持的平台失败")
 
 @router.post("/cookies/save", summary="保存Cookie")
@@ -163,7 +165,7 @@ async def get_all_cookies_status():
             }
         return {"success": True, "data": result}
     except Exception as e:
-        logger.error(f"获取所有平台Cookie状态失败: {e}")
+        logger.error(f"获取所有 cookie 状态失败: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="获取平台状态失败")
 
 @router.get("/cookies/{platform}", summary="获取平台Cookie状态")
@@ -197,17 +199,28 @@ async def delete_platform_cookies(platform: str):
     if not cookie_file or not cookie_file.exists():
         return {"success": True, "message": f"{platform} 凭证本就不存在"}
             
+    # Step 1: 删除 cookie 文件（独立 try/except，失败才返回 500）
     try:
         cookie_file.unlink()
-        key_file = CONFIG_DIR / f"{platform}_key.key"
-        if key_file.exists():
-            key_file.unlink()
-
-        return {"success": True, "message": f"✅ {platform.capitalize()} 凭证已物理粉碎"}
     except Exception as e:
-        logger.error(f"删除失败: {type(e).__name__}")
-        logger.debug(f"详细错误: {e}")  # debug 级别记录详情
-        raise HTTPException(status_code=500, detail="删除失败，请检查系统权限")
+        logger.error(f"删除 cookie 文件失败: {type(e).__name__}")
+        logger.debug(f"详细错误: {e}")
+        raise HTTPException(status_code=500, detail="删除 cookie 文件失败，请检查系统权限")
+
+    # Step 2: 删除关联密钥文件（独立 try/except，失败不影响 cookie 已删除的结果）
+    key_file = CONFIG_DIR / f"{platform}_key.key"
+    if key_file.exists():
+        try:
+            key_file.unlink()
+        except Exception as e:
+            logger.error(f"删除密钥文件失败: {type(e).__name__}")
+            logger.debug(f"详细错误: {e}")
+            return {
+                "success": True,
+                "message": f"⚠️ {platform.capitalize()} cookie 已删除，但密钥文件删除失败，请手动清理"
+            }
+
+    return {"success": True, "message": f"✅ {platform.capitalize()} 凭证已物理粉碎"}
 
 # ============ 4. 兼容性适配 ============
 
