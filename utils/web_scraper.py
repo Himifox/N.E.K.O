@@ -2188,7 +2188,7 @@ async def fetch_bilibili_personal_dynamic(limit: int = 10) -> Dict[str, Any]:
                 if len(dynamic_list) >= limit:
                     break
             except Exception as item_e:
-                logger.warning(f"解析单条动态失败，跳过, 动态ID: {item.get('id_str', '未知')}")
+                logger.warning(f"解析单条动态失败, 跳过, 动态ID: {item.get('id_str', '未知')}, 错误类型: {type(item_e).__name__}")
 
         if dynamic_list:
             logger.info(f"✅ 成功获取到 {len(dynamic_list)} 条你关注的UP主动态消息")
