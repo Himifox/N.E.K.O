@@ -1112,6 +1112,7 @@ class VRMInteraction {
 
         canvas.addEventListener('mouseenter', onMouseEnter);
         window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('mousemove', onPointerMove);
 
         this._floatingButtonsMouseEnter = onMouseEnter;
         this._floatingButtonsPointerMove = onPointerMove;
@@ -1144,6 +1145,7 @@ class VRMInteraction {
         }
         if (this._floatingButtonsPointerMove) {
             window.removeEventListener('pointermove', this._floatingButtonsPointerMove);
+            window.removeEventListener('mousemove', this._floatingButtonsPointerMove);
             this._floatingButtonsPointerMove = null;
         }
         if (this._hideButtonsTimer) {

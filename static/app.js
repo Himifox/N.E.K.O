@@ -6923,6 +6923,7 @@ function init_app() {
 
     // 启动任务状态轮询
     window.startAgentTaskPolling = function () {
+        console.trace('[App] startAgentTaskPolling');
         // Always attempt to show HUD
         if (window.AgentHUD && window.AgentHUD.createAgentTaskHUD) {
             window.AgentHUD.createAgentTaskHUD();
@@ -6942,6 +6943,7 @@ function init_app() {
     // 停止任务状态轮询
     window.stopAgentTaskPolling = function () {
         console.log('[App] 停止 Agent 任务状态轮询');
+        console.trace('[App] stopAgentTaskPolling caller trace');
 
         if (agentTaskPollingInterval) {
             if (typeof agentTaskPollingInterval !== 'boolean') {
@@ -6987,30 +6989,60 @@ function init_app() {
     }
 
     function checkAndToggleTaskHUD() {
-        // DOM checkboxes (may not exist or may not be synced yet)
         const masterCheckbox = document.getElementById('live2d-agent-master');
         const keyboardCheckbox = document.getElementById('live2d-agent-keyboard');
         const browserCheckbox = document.getElementById('live2d-agent-browser');
-
         const userPlugin = document.getElementById('live2d-agent-user-plugin');
 
-        const domMaster = masterCheckbox && masterCheckbox.checked;
+        // Extract DOM states
+        const domMaster = masterCheckbox ? masterCheckbox.checked : false;
         const domChild = (keyboardCheckbox && keyboardCheckbox.checked)
             || (browserCheckbox && browserCheckbox.checked)
-
             || (userPlugin && userPlugin.checked);
 
-        // Cached flags from backend (always the source of truth)
-        const flags = window.agentStateMachine && window.agentStateMachine._cachedFlags;
-        const flagMaster = flags && !!flags.agent_enabled;
-        const flagChild = flags && !!(flags.computer_use_enabled || flags.browser_use_enabled || flags.user_plugin_enabled);
+        // Extract backend/cached state
+        const snap = window._agentStatusSnapshot; 
+        const machineFlags = window.agentStateMachine ? window.agentStateMachine._cachedFlags : null;
+        
+        // We prefer snapshot flags if they exist and are populated, else fallback to machine cached flags
+        const flags = (snap && snap.flags && Object.keys(snap.flags).length > 0) ? snap.flags : machineFlags;
 
-        if ((domMaster && domChild) || (flagMaster && flagChild)) {
+        // Extract optimistic state from agent_ui_v2 if available
+        let optMaster = undefined;
+        let optChild = undefined;
+        if (window.agent_ui_v2_state && window.agent_ui_v2_state.optimistic) {
+             const opt = window.agent_ui_v2_state.optimistic;
+             if ('agent_enabled' in opt) optMaster = !!opt.agent_enabled;
+             if ('computer_use_enabled' in opt || 'browser_use_enabled' in opt || 'user_plugin_enabled' in opt) {
+                 optChild = !!opt.computer_use_enabled || !!opt.browser_use_enabled || !!opt.user_plugin_enabled;
+             }
+        }
+
+        let isMasterOn = false;
+        let isChildOn = false;
+
+        // Is the UI fully interactive? If masterCheckbox is missing or disabled, it usually means we are loading/syncing
+        const isUiInteractive = masterCheckbox && !masterCheckbox.disabled;
+
+        if (!isUiInteractive) {
+            // UI is loading, trust optimistic state first, then backend flags
+            isMasterOn = optMaster !== undefined ? optMaster : (flags && !!flags.agent_enabled);
+            isChildOn = optChild !== undefined ? optChild : (flags && !!(flags.computer_use_enabled || flags.browser_use_enabled || flags.user_plugin_enabled));
+        } else {
+            // UI is interactive. We strictly trust the explicit DOM state, plus any optimistic overrides.
+            isMasterOn = optMaster !== undefined ? optMaster : domMaster;
+            isChildOn = optChild !== undefined ? optChild : domChild;
+        }
+
+        if (isMasterOn && isChildOn) {
+            console.log('[DEBUG HUD] Starting polling. Master:', isMasterOn, 'Child:', isChildOn, 'DOM:', domMaster, domChild, 'Flag:', flags?.agent_enabled, 'Opt:', optMaster, optChild);
             window.startAgentTaskPolling();
         } else {
+            console.log('[DEBUG HUD] Stopping polling. Master:', isMasterOn, 'Child:', isChildOn, 'DOM:', domMaster, domChild, 'Flag:', flags?.agent_enabled, 'Opt:', optMaster, optChild);
             window.stopAgentTaskPolling();
         }
     }
+
 
     // 暴露给其他模块使用
     window.checkAndToggleTaskHUD = checkAndToggleTaskHUD;

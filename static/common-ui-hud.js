@@ -444,6 +444,15 @@ window.AgentHUD._setupCollapseFunctionality = function (emptyState, collapseButt
 
 // 显示任务 HUD
 window.AgentHUD.showAgentTaskHUD = function () {
+    console.log('[AgentHUD][TimeoutTrace] showAgentTaskHUD called. Current timeout ID:', this._hideTimeout);
+    
+    // 清除任何正在进行的隐藏动画定时器，防止闪现后立刻消失
+    if (this._hideTimeout) {
+        console.log('[AgentHUD][TimeoutTrace] Clearing timeout ID:', this._hideTimeout);
+        clearTimeout(this._hideTimeout);
+        this._hideTimeout = null;
+    }
+
     let hud = document.getElementById('agent-task-hud');
     if (!hud) {
         hud = this.createAgentTaskHUD();
@@ -468,17 +477,32 @@ window.AgentHUD.showAgentTaskHUD = function () {
 
 // 隐藏任务 HUD
 window.AgentHUD.hideAgentTaskHUD = function () {
-    const hud = document.getElementById('agent-task-hud');
-    if (hud) {
-        hud.style.opacity = '0';
-        const savedPos = localStorage.getItem('agent-task-hud-position');
-        if (!savedPos) {
-            hud.style.transform = 'translateY(-50%) translateX(20px)';
-        }
-        setTimeout(() => {
-            hud.style.display = 'none';
-        }, 300);
+    console.log('[AgentHUD] hideAgentTaskHUD called');
+    let hud = document.getElementById('agent-task-hud');
+    if (!hud) {
+        console.log('[AgentHUD] HUD element not found, creating it first to hide it properly');
+        hud = this.createAgentTaskHUD();
     }
+    
+    console.log('[AgentHUD] HUD element found, starting fade out');
+    hud.style.opacity = '0';
+    const savedPos = localStorage.getItem('agent-task-hud-position');
+    if (!savedPos) {
+        hud.style.transform = 'translateY(-50%) translateX(20px)';
+    }
+
+    // 如果之前有正在等待的隐藏定时器，先清理掉
+    if (this._hideTimeout) {
+        console.log('[AgentHUD][TimeoutTrace] hideAgentTaskHUD clearing previous timeout ID:', this._hideTimeout);
+        clearTimeout(this._hideTimeout);
+    }
+
+    this._hideTimeout = setTimeout(() => {
+        console.log('[AgentHUD][TimeoutTrace] HUD element display set to none. Timeout ID was:', this._hideTimeout);
+        hud.style.display = 'none';
+        this._hideTimeout = null;
+    }, 300);
+    console.log('[AgentHUD][TimeoutTrace] hideAgentTaskHUD set new timeout ID:', this._hideTimeout);
 };
 
 // 更新任务 HUD 内容
