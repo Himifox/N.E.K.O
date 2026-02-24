@@ -61,10 +61,10 @@ def _fix_bilibili_api_env():
             logger.debug("B站数据目录已存在，检查配置文件...")
 
         # 3. 定义必须存在的配置文件及其默认内容
-        # video_uploader_lines.json: 核心报错文件，必须是列表格式 []
+        # video_uploader_lines.json: 核心报错文件，必须是字典格式 {}
         # gevent_patch.json: 部分环境需要的补丁配置，通常是 {}
         missing_files = {
-            "video_uploader_lines.json": [],
+            "video_uploader_lines.json": {},
             "gevent_patch.json": {}
         }
 
@@ -86,8 +86,8 @@ def _fix_bilibili_api_env():
                         with open(file_path, "w", encoding="utf-8") as f:
                             json.dump(default_content, f)
                         logger.info(f"⚠️ 发现空文件 {file_name}，已重置为默认值")
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"重置空文件 {file_name} 失败: {e}")
 
         if is_compiled:
             if fixed_count > 0:
