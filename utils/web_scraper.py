@@ -19,8 +19,39 @@ from bs4 import BeautifulSoup
 import os
 from pathlib import Path
 import json
+import sys
 
+# ==================================================
+# 增加缺失的 bilibili_api 数据文件修复逻辑，防止打包后环境缺失导致的错误
+# ==================================================
+def fix_missing_bilibili_api_json():
+    try:
+        # 优先判断是否是打包后环境
+        if hasattr(sys, '_MEIPASS'):
+            base = sys._MEIPASS
+        else:
+            base = os.path.dirname(os.path.abspath(__file__))
+
+        # 构造缺失的文件路径
+        data_dir = os.path.join(base, "bilibili_api", "data")
+        json_file = os.path.join(data_dir, "video_uploader_lines.json")
+
+        # 不存在就创建
+        if not os.path.exists(json_file):
+            os.makedirs(data_dir, exist_ok=True)
+            with open(json_file, 'w', encoding='utf-8') as f:
+                json.dump({"uploaders": [], "lines": []}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+# 启动就执行修复
+fix_missing_bilibili_api_json()
+
+
+# ==================================================
 # 从 language_utils 导入区域检测功能
+# ==================================================
+
 try:
     from utils.language_utils import is_china_region
 except ImportError:
