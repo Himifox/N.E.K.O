@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -7,8 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from utils.config_manager import get_config_manager
+from utils.logger_config import get_module_logger
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__, "Agent")
 
 _LLM_MODES: List[str] = ["schema", "text"]
 _API_MODE_CACHE_LOCK = threading.Lock()
@@ -20,9 +22,9 @@ def _configure_browser_logging() -> None:
 
     Disk logs still get WARNING+ entries; real-time progress uses print.
     """
-    for name in ("service", "browser_use.browser", "browser_use.llm"):
+    for name in ("browser_use.llm"):
         logging.getLogger(name).setLevel(logging.ERROR)
-    for name in ("browser_use", "browser_use.agent"):
+    for name in ("browser_use", "service", "browser_use.browser", "browser_use.agent"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
 
@@ -140,6 +142,61 @@ _DEFAULT_TIMEOUT_S = 300
 _DEFAULT_KEEP_ALIVE = True
 
 
+def _find_bundled_chromium() -> Optional[str]:
+    """Find the Chromium executable bundled inside ``playwright_browsers/``.
+
+    Handles both ``chrome-win`` and ``chrome-win64`` directory names that
+    different Playwright versions may produce.
+    """
+    import glob as _glob
+
+    browsers_dir = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "")
+    if not browsers_dir:
+        for root in (
+            os.path.dirname(os.path.abspath(sys.argv[0])),
+            os.path.dirname(os.path.abspath(__file__)),
+            os.getcwd(),
+        ):
+            candidate = os.path.join(root, "playwright_browsers")
+            if os.path.isdir(candidate):
+                browsers_dir = candidate
+                break
+    if not browsers_dir or not os.path.isdir(browsers_dir):
+        return None
+
+    for pattern in (
+        os.path.join(browsers_dir, "chromium-*", "chrome-win64", "chrome.exe"),
+        os.path.join(browsers_dir, "chromium-*", "chrome-win", "chrome.exe"),
+        os.path.join(browsers_dir, "chromium-*", "chrome-linux*", "chrome"),
+        os.path.join(browsers_dir, "chromium-*", "chrome-mac", "Chromium.app",
+                     "Contents", "MacOS", "Chromium"),
+    ):
+        matches = _glob.glob(pattern)
+        if matches:
+            matches.sort()
+            exe = matches[-1]
+            if os.path.isfile(exe):
+                return exe
+    return None
+
+
+def _find_chrome_path() -> Optional[str]:
+    """Pre-flight: locate a usable Chrome / Chromium executable.
+
+    Checks the bundled Playwright Chromium first, then falls back to
+    browser_use's system-wide search.
+    """
+    bundled = _find_bundled_chromium()
+    if bundled:
+        return bundled
+    try:
+        from browser_use.browser.watchdogs.local_browser_watchdog import (
+            LocalBrowserWatchdog,
+        )
+        return LocalBrowserWatchdog._find_installed_browser_path()
+    except Exception:
+        return None
+
 def _dump_history(history, mode: str) -> None:
     """Print detailed diagnostics from a browser-use AgentHistory."""
     try:
@@ -224,10 +281,12 @@ class BrowserUseAdapter:
         self._config_manager = get_config_manager()
         self.last_error: Optional[str] = None
         self._headless = headless
+        self._chrome_path: Optional[str] = None
         self._browser_session: Any = None
         self._session_ever_started: bool = False
         self._agents: Dict[str, Any] = {}
         self._overlay_task: Optional[asyncio.Task] = None
+        self._cancelled: bool = False
         try:
             from browser_use import Agent  # noqa: F401
             from browser_use.browser.session import BrowserSession  # noqa: F401
@@ -235,6 +294,11 @@ class BrowserUseAdapter:
         except Exception as e:
             self._ready_import = False
             self.last_error = str(e)
+
+    def cancel_running(self) -> None:
+        """Signal the currently running task to stop at the next step boundary."""
+        self._cancelled = True
+        logger.info("[BrowserUse] cancel_running called, task will abort at next step")
 
     def is_available(self) -> Dict[str, Any]:
         ready = self._ready_import
@@ -250,16 +314,35 @@ class BrowserUseAdapter:
     async def _get_browser_session(self) -> Any:
         """Lazy-create and cache a BrowserSession, with stale-session recovery."""
         if self._browser_session is not None and self._session_ever_started:
+            stale = False
             cdp = getattr(self._browser_session, "_cdp_client_root", None)
             if cdp is None:
                 print("[BrowserUse] cached session lost CDP connection, recreating", flush=True)
+                stale = True
+
+            if not stale:
+                watchdog = getattr(self._browser_session, "_local_browser_watchdog", None)
+                proc = getattr(watchdog, "_subprocess", None) if watchdog else None
+                if proc is not None:
+                    try:
+                        if not proc.is_running():
+                            print("[BrowserUse] browser process dead, recreating session", flush=True)
+                            stale = True
+                    except Exception:
+                        stale = True
+
+            if stale:
                 await self._close_browser()
+
         if self._browser_session is None:
             from browser_use.browser.session import BrowserSession
-            self._browser_session = BrowserSession(
+            kwargs: Dict[str, Any] = dict(
                 headless=self._headless,
                 keep_alive=_DEFAULT_KEEP_ALIVE,
             )
+            if self._chrome_path:
+                kwargs["executable_path"] = self._chrome_path
+            self._browser_session = BrowserSession(**kwargs)
             self._session_ever_started = False
         return self._browser_session
 
@@ -296,6 +379,18 @@ class BrowserUseAdapter:
             state["failed_modes"] = [m for m in _LLM_MODES if m in failed]
 
     @staticmethod
+    def _is_browser_disconnected_error(err) -> bool:
+        """Detect errors indicating the browser window was closed by user."""
+        msg = str(err).lower()
+        return any(s in msg for s in (
+            "websocket connection closed",
+            "browser not connected",
+            "target may have detached",
+            "browser is in an unstable state",
+            "no valid agent focus",
+        ))
+
+    @staticmethod
     def _is_response_format_error(err) -> bool:
         msg = str(err).lower()
         return (
@@ -303,12 +398,39 @@ class BrowserUseAdapter:
             and ("invalid" in msg or "must be text or json_object" in msg)
         )
 
+    @staticmethod
+    def _is_unsupported_param_error(err) -> bool:
+        """Detect Gemini-style 'Unknown name' payload errors."""
+        msg = str(err).lower()
+        return "unknown name" in msg and "invalid json payload" in msg
+
+    @staticmethod
+    def _is_schema_error(err) -> bool:
+        """Detect Gemini schema nesting depth / structure errors."""
+        msg = str(err).lower()
+        return "nesting depth" in msg or (
+            "generationconfig" in msg and "schema" in msg
+        )
+
+    @staticmethod
+    def _is_gemini_compatible_endpoint(base_url: str) -> bool:
+        return any(s in base_url for s in (
+            "googleapis.com", "generativelanguage", "lanlan.app",
+        ))
+
     def _build_llm(self, mode: str = "schema") -> Any:
-        """Build a browser-use compatible ChatOpenAI instance."""
+        """Build a browser-use compatible ChatOpenAI instance.
+
+        For Gemini-compatible endpoints, strips parameters that the API
+        rejects (``frequency_penalty``, ``seed``, ``service_tier``).
+        A thin wrapper class is used so the constraint survives any
+        internal copy / re-init performed by browser-use.
+        """
         from browser_use.llm import ChatOpenAI as BUChatOpenAI
         api_cfg = self._config_manager.get_model_api_config("agent")
         base_url = api_cfg.get("base_url", "") or ""
         model = api_cfg.get("model", "") or ""
+        is_gemini = self._is_gemini_compatible_endpoint(base_url)
         kwargs: Dict[str, Any] = dict(
             model=model,
             api_key=api_cfg.get("api_key"),
@@ -324,6 +446,10 @@ class BrowserUseAdapter:
             kwargs["add_schema_to_system_prompt"] = True
             kwargs["remove_min_items_from_schema"] = True
             kwargs["remove_defaults_from_schema"] = True
+        if is_gemini:
+            kwargs["frequency_penalty"] = None
+            kwargs["seed"] = None
+            kwargs["service_tier"] = None
         return BUChatOpenAI(**kwargs)
 
     async def _cdp_eval_on_page(self, session: Any, js: str) -> None:
@@ -401,9 +527,22 @@ class BrowserUseAdapter:
             timeout_s: Max seconds before timeout (default 300s).
             session_id: Reuse Agent if same session_id (multi-turn).
         """
+        self._cancelled = False
+
         status = self.is_available()
         if not status.get("ready"):
             return {"success": False, "error": "; ".join(status.get("reasons", []))}
+
+        chrome = _find_chrome_path()
+        if not chrome:
+            msg = (
+                "未找到 Chrome / Chromium 浏览器，请安装 Google Chrome 后重试。"
+                "  (checked standard paths on this system)"
+            )
+            print(f"[BrowserUse] PREFLIGHT FAIL: {msg}", flush=True)
+            return {"success": False, "error": msg}
+        self._chrome_path = chrome
+        print(f"[BrowserUse] preflight OK, chrome={chrome}", flush=True)
 
         from browser_use import Agent
 
@@ -449,8 +588,13 @@ class BrowserUseAdapter:
                             self._agents[session_id] = agent
 
                         self._start_overlay(browser_session)
+                        _disconnect_errors = 0
 
                         async def _on_step_end(a: Any) -> None:
+                            nonlocal _disconnect_errors
+                            if self._cancelled:
+                                print("[BrowserUse] Task cancelled by user", flush=True)
+                                raise asyncio.CancelledError("Task cancelled by user")
                             s = getattr(a, "state", None)
                             if s is None:
                                 return
@@ -469,6 +613,16 @@ class BrowserUseAdapter:
                                 f"{', DONE' if done else ''}",
                                 flush=True,
                             )
+                            if err and BrowserUseAdapter._is_browser_disconnected_error(err):
+                                _disconnect_errors += 1
+                                if _disconnect_errors >= 2:
+                                    print(
+                                        f"[BrowserUse] Browser disconnected ({_disconnect_errors} consecutive errors), aborting task",
+                                        flush=True,
+                                    )
+                                    raise ConnectionError("Browser disconnected - user closed the browser")
+                            else:
+                                _disconnect_errors = 0
 
                         history = await asyncio.wait_for(
                             agent.run(on_step_end=_on_step_end),
@@ -505,10 +659,22 @@ class BrowserUseAdapter:
                         if successful:
                             self._mark_mode_result(api_sig, mode, ok=True)
                         break
+                    except ConnectionError as e:
+                        if self._is_browser_disconnected_error(e):
+                            print(
+                                f"[BrowserUse] Browser disconnected during mode={mode}, stopping all retries",
+                                flush=True,
+                            )
+                            last_err = e
+                            await self._close_browser()
+                            break
+                        raise
                     except Exception as e:
                         last_err = e
                         self._mark_mode_result(api_sig, mode, ok=False)
-                        if self._is_response_format_error(e):
+                        if (self._is_response_format_error(e)
+                                or self._is_unsupported_param_error(e)
+                                or self._is_schema_error(e)):
                             print(
                                 f"[BrowserUse] exception in mode={mode}, "
                                 f"falling back to next mode: {e}",
@@ -549,20 +715,30 @@ class BrowserUseAdapter:
                     "done": bool(done),
                     "steps": getattr(history, "number_of_steps", lambda: None)(),
                 }
+            except asyncio.CancelledError:
+                logger.info("[BrowserUse] Task cancelled by user")
+                if browser_session:
+                    await self._remove_overlay(browser_session)
+                if session_id and session_id in self._agents:
+                    del self._agents[session_id]
+                return {"success": False, "error": "Task cancelled by user"}
             except asyncio.TimeoutError:
                 logger.warning("[BrowserUse] Task timed out after %ss", timeout_s)
                 if browser_session:
                     await self._remove_overlay(browser_session)
                 if session_id and session_id in self._agents:
                     del self._agents[session_id]
-                return {"success": False, "error": f"Task timed out after {timeout_s}s"}
+                return {"success": False, "error": f"timed out after {timeout_s}s"}
             except Exception as e:
                 if browser_session:
                     await self._remove_overlay(browser_session)
                 if session_id and session_id in self._agents:
                     del self._agents[session_id]
-                await self._close_browser()
+                if self._is_browser_disconnected_error(e):
+                    logger.warning("[BrowserUse] Browser disconnected, task aborted: %s", e)
+                    return {"success": False, "error": "Browser disconnected - browser window was closed"}
                 if launch_attempt == 0 and not self._is_response_format_error(e):
+                    await self._close_browser()
                     logger.warning("[BrowserUse] Browser error (attempt 1), retrying: %s", e)
                     continue
                 logger.error("[BrowserUse] Task failed: %s", e)
@@ -576,13 +752,78 @@ class BrowserUseAdapter:
     async def _close_browser(self) -> None:
         self._stop_overlay()
         if self._browser_session is not None:
+            # Grab browser PID before stopping so we can force-kill if .stop() hangs
+            watchdog = getattr(self._browser_session, "_local_browser_watchdog", None)
+            proc = getattr(watchdog, "_subprocess", None) if watchdog else None
+            browser_pid = None
+            if proc is not None:
+                try:
+                    browser_pid = proc.pid
+                except Exception:
+                    pass
+
             try:
-                await self._browser_session.stop()
-            except Exception:
-                pass
+                await asyncio.wait_for(self._browser_session.stop(), timeout=10)
+            except asyncio.TimeoutError:
+                logger.warning("[BrowserUse] _browser_session.stop() timed out after 10s")
+                self._force_kill_browser(browser_pid)
+            except Exception as exc:
+                logger.warning("[BrowserUse] _browser_session.stop() raised: %s", exc)
+                self._force_kill_browser(browser_pid)
+
             self._browser_session = None
         self._session_ever_started = False
         self._agents.clear()
+
+    @staticmethod
+    def _force_kill_browser(browser_pid: Optional[int]) -> None:
+        """Force-kill a browser process tree by PID when graceful .stop() fails."""
+        if browser_pid is None:
+            return
+        import signal
+        import subprocess
+        try:
+            import psutil
+            parent = psutil.Process(browser_pid)
+            for child in parent.children(recursive=True):
+                try:
+                    child.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            parent.kill()
+            logger.info("[BrowserUse] force-killed browser tree (pid=%d) via psutil", browser_pid)
+            return
+        except ImportError:
+            logger.warning("[BrowserUse] psutil not available, falling back to platform kill for pid=%d", browser_pid)
+        except Exception as exc:
+            logger.warning("[BrowserUse] psutil kill failed for pid=%d: %s, falling back", browser_pid, exc)
+
+        try:
+            if sys.platform == "win32":
+                subprocess.run(
+                    ["taskkill", "/PID", str(browser_pid), "/T", "/F"],
+                    capture_output=True, timeout=10,
+                )
+                logger.info("[BrowserUse] force-killed browser tree (pid=%d) via taskkill", browser_pid)
+            else:
+                subprocess.run(
+                    ["pkill", "-TERM", "-P", str(browser_pid)],
+                    capture_output=True, timeout=10,
+                )
+                subprocess.run(
+                    ["pkill", "-KILL", "-P", str(browser_pid)],
+                    capture_output=True, timeout=10,
+                )
+                logger.info("[BrowserUse] force-killed child processes of pid=%d via pkill", browser_pid)
+                os.kill(browser_pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+                logger.info("[BrowserUse] force-killed browser pid=%d via os.kill", browser_pid)
+        except (subprocess.SubprocessError, OSError, PermissionError) as e:
+            logger.warning("[BrowserUse] platform kill failed for pid=%d: %s", browser_pid, e)
+            try:
+                os.kill(browser_pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+                logger.info("[BrowserUse] force-killed browser pid=%d via os.kill fallback", browser_pid)
+            except (OSError, PermissionError) as e2:
+                logger.warning("[BrowserUse] failed to kill browser pid=%d: %s", browser_pid, e2)
 
     async def close(self) -> None:
         """Graceful shutdown."""
