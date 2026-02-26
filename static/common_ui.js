@@ -1,3 +1,12 @@
+/**
+ * Common UI - 通用用户界面功能
+ * 功能:
+ *  - 聊天容器的展开/收起功能
+ *  - 聊天内容的滚动到底部功能
+ *  - 移动端检测（基于窗口宽度）
+ *  - 聊天容器的可拖拽缩放功能
+ */
+
 // 获取聊天容器元素
 const chatContainer = document.getElementById('chat-container');
 const chatContentWrapper = document.getElementById('chat-content-wrapper');
@@ -117,7 +126,7 @@ function setupResizableChatContainer() {
         `;
         document.head.appendChild(style);
     }
-
+    // 初始化时添加可调整大小类
     chatContainer.classList.add('resizable-chat-container');
 
     const clampSize = (width, height) => {
@@ -128,7 +137,7 @@ function setupResizableChatContainer() {
             height: Math.max(MIN_HEIGHT, Math.min(maxHeight, height))
         };
     };
-
+    // 应用容器尺寸（同时更新最大高度）
     const applyContainerSize = (width, height) => {
         const clamped = clampSize(width, height);
         chatContainer.style.width = `${clamped.width}px`;
@@ -136,7 +145,7 @@ function setupResizableChatContainer() {
         chatContainer.style.maxHeight = `${clamped.height}px`;
         return clamped;
     };
-
+    // 持久化容器尺寸到 localStorage
     const persistContainerSize = () => {
         const rect = chatContainer.getBoundingClientRect();
         try {
@@ -146,7 +155,7 @@ function setupResizableChatContainer() {
             /* localStorage 不可用时静默跳过 */
         }
     };
-
+    // 从 localStorage 恢复容器尺寸
     const restoreContainerSize = () => {
         let savedW = NaN;
         let savedH = NaN;
@@ -171,7 +180,7 @@ function setupResizableChatContainer() {
     let startWidth = 0;
     let startHeight = 0;
     let startBottom = 0;
-
+    // 处理调整大小移动事件
     const onResizeMove = (e) => {
         if (!isResizing) return;
         const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
@@ -187,7 +196,7 @@ function setupResizableChatContainer() {
         chatContainer.style.bottom = `${Math.max(0, startBottom - consumedDeltaY)}px`;
         e.preventDefault();
     };
-
+    // 处理调整大小结束事件
     const stopResize = () => {
         if (!isResizing) return;
         isResizing = false;
@@ -197,12 +206,12 @@ function setupResizableChatContainer() {
             window.ChatDialogSnap.snapIntoScreen({ animate: true });
         }
     };
-
+    // 处理调整大小开始事件
     const startResize = (e) => {
         if (uiIsMobileWidth() || isCollapsed()) return;
         isResizing = true;
         chatContainer.classList.add('is-resizing');
-
+        // 记录初始位置和尺寸
         const point = e.type.startsWith('touch') ? e.touches[0] : e;
         const rect = chatContainer.getBoundingClientRect();
         startX = point.clientX;
@@ -216,7 +225,7 @@ function setupResizableChatContainer() {
         e.stopPropagation();
         e.preventDefault();
     };
-
+    // 绑定调整大小事件
     resizeHandle.addEventListener('mousedown', startResize);
     resizeHandle.addEventListener('touchstart', startResize, { passive: false });
     document.addEventListener('mousemove', onResizeMove);
@@ -422,7 +431,7 @@ if (toggleBtn) {
 
     let snapAnimationFrameId = null;
     let isSnapping = false;
-
+    // 聊天框拖动逻辑的缓动函数（提供多种选择）
     const EasingFunctions = {
         easeOutBack: (t) => {
             const c1 = 1.70158;
@@ -432,6 +441,7 @@ if (toggleBtn) {
         easeOutCubic: (t) => (--t) * t * t + 1
     };
 
+    // 获取当前显示区域的尺寸（考虑多屏幕）
     async function getDisplayWorkAreaSize() {
         let width = window.innerWidth;
         let height = window.innerHeight;
@@ -454,6 +464,7 @@ if (toggleBtn) {
         return { width, height };
     }
 
+    // 获取聊天框当前的位置（left, bottom）
     function getChatContainerPosition() {
         const computedStyle = window.getComputedStyle(chatContainer);
         const rect = chatContainer.getBoundingClientRect();
@@ -471,11 +482,13 @@ if (toggleBtn) {
         return { left, bottom, rect };
     }
 
+    // 应用新的位置（left, bottom）到聊天框
     function applyChatContainerPosition(left, bottom) {
         chatContainer.style.left = `${left}px`;
         chatContainer.style.bottom = `${bottom}px`;
     }
 
+    // 聊天框拖动动画
     function animateChatContainerTo(startLeft, startBottom, targetLeft, targetBottom) {
         if (snapAnimationFrameId) {
             cancelAnimationFrame(snapAnimationFrameId);
@@ -509,6 +522,7 @@ if (toggleBtn) {
         snapAnimationFrameId = requestAnimationFrame(animate);
     }
 
+    // 如果正在执行回弹动画，或者没有找到聊天容器，直接返回，避免重复触发
     async function snapChatContainerIntoScreen({ animate = true } = {}) {
         if (!chatContainer || isSnapping) return;
 
@@ -702,22 +716,20 @@ if (toggleBtn) {
         }, { passive: false });
     }
     
-    // 输入区域：点击空白处（不是输入框、按钮等）可以拖动
+    // 输入区域整体可拖动，但排除 textarea/button 等交互子元素
     if (textInputArea) {
+        const isInteractiveTarget = (el) =>
+            !!el.closest('textarea, input, button, select, a, [contenteditable]');
+
         textInputArea.addEventListener('mousedown', (e) => {
-            if (!isCollapsed()) {
-                // 只有点击空白区域才拖动，不包括输入框、按钮等交互元素
-                if (e.target === textInputArea) {
-                    startDrag(e);
-                }
+            if (!isCollapsed() && !isInteractiveTarget(e.target)) {
+                startDrag(e);
             }
         });
-        
+
         textInputArea.addEventListener('touchstart', (e) => {
-            if (!isCollapsed()) {
-                if (e.target === textInputArea) {
-                    startDrag(e);
-                }
+            if (!isCollapsed() && !isInteractiveTarget(e.target)) {
+                startDrag(e);
             }
         }, { passive: false });
     }
@@ -774,8 +786,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!iconImg) {
             // 如果没有图标，创建一个
             iconImg = document.createElement('img');
-            iconImg.style.width = '24px';  /* 图标尺寸 */
-            iconImg.style.height = '24px';  /* 图标尺寸 */
+            iconImg.style.width = '32px';  /* 图标尺寸 */
+            iconImg.style.height = '32px';  /* 图标尺寸 */
             iconImg.style.objectFit = 'contain';
             iconImg.style.pointerEvents = 'none'; /* 确保图标不干扰点击事件 */
             toggleBtn.innerHTML = '';

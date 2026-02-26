@@ -994,4 +994,3 @@ Live2DManager.prototype.getPersistentExpressionParamIds = function() {
     
     return paramIds;
 };
-
