@@ -2072,6 +2072,11 @@
         "whitespaceTrimmed": "⚠️ [{{fieldName}}] contains leading/trailing spaces, which have been automatically trimmed. Please confirm and resubmit.",
         "networkError": "❌ Network error: Unable to connect to backend service",
         "saveFailed": "Save failed, please check if the format is correct",
+        "pasteHere": "Paste here",
+        "submitting": "Securely encrypting and transmitting...",
+        "noCookies": "Please configure Cookies first",
+        "statusLoadFailed": "Status load failed",
+        "thisPlatform": "this platform",
         "instructions": {
             "bilibili": "📌 <b>Target:</b> Go to <b>bilibili.com</b> to fetch these cookies.",
             "douyin": "📌 <b>Target:</b> Go to <b>douyin.com</b> to fetch these cookies.",

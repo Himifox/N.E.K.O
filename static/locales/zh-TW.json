@@ -2072,7 +2072,7 @@
         "whitespaceTrimmed": "⚠️ [{{fieldName}}] 包含前/後空白，已自動修剪，請確認後重新提交",
         "networkError": "❌ 網路異常: 無法連接至後端服務",
         "saveFailed": "儲存失敗，請檢查格式是否正確",
-         "pasteHere": "在此貼上",
+        "pasteHere": "在此貼上",
         "submitting": "安全加密傳輸中...",
         "noCookies": "請先配置 Cookies",
         "statusLoadFailed": "狀態載入失敗",

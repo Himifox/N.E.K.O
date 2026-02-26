@@ -2072,6 +2072,11 @@
         "whitespaceTrimmed": "⚠️ [{{fieldName}}]에 앞/뒤 공백이 포함되어 자동으로 제거되었습니다. 확인 후 다시 제출해주세요",
         "networkError": "❌ 네트워크 오류: 백엔드 서비스에 연결할 수 없습니다",
         "saveFailed": "저장 실패, 형식이 올바른지 확인해주세요",
+        "pasteHere": "여기에 붙여넣기",
+        "submitting": "안전하게 암호화하여 전송 중...",
+        "noCookies": "먼저 쿠키를 설정하세요",
+        "statusLoadFailed": "상태 로드 실패",
+        "thisPlatform": "이 플랫폼",
         "instructions": {
             "bilibili": "📌 <b>대상:</b> <b>bilibili.com</b>에 접속하여 해당 쿠키를 가져오세요.",
             "douyin": "📌 <b>대상:</b> <b>douyin.com</b>에 접속하여 해당 쿠키를 가져오세요.",

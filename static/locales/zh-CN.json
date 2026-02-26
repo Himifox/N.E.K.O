@@ -2072,6 +2072,11 @@
         "whitespaceTrimmed": "⚠️ [{{fieldName}}] 包含前/后空白，已自动修剪，请确认后重新提交",
         "networkError": "❌ 网络异常: 无法连接至后端服务",
         "saveFailed": "保存失败，请检查格式是否正确",
+        "pasteHere": "在此粘贴",
+        "submitting": "安全加密传输中...",
+        "noCookies": "请先配置 Cookies",
+        "statusLoadFailed": "状态加载失败",
+        "thisPlatform": "此平台",
         "instructions": {
             "bilibili": "📌 目标：请前往 bilibili.com 获取这些 Cookies。",
             "douyin": "📌 <b>目标：</b> 请前往 <b>douyin.com</b> 获取这些 Cookies。",

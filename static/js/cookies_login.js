@@ -213,7 +213,6 @@ function switchTab(platformKey, btnElement, isReRender = false) {
                     <span class="desc">${DOMPurify.sanitize(f.desc)}</span>
                 </label>
                 <input type="text" id="${inputId}" 
-                       value="${DOMPurify.sanitize(value)}"
                        placeholder="${placeholderBase} ${DOMPurify.sanitize(f.key)}..." 
                        autocomplete="off" 
                        class="credential-input">

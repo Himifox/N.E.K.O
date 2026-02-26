@@ -2072,6 +2072,11 @@
         "whitespaceTrimmed": "⚠️ [{{fieldName}}] に前後の空白が含まれていたため、自動的にトリミングされました。確認後、再提出してください",
         "networkError": "❌ ネットワークエラー: バックエンドサービスに接続できません",
         "saveFailed": "保存に失敗しました、フォーマットが正しいか確認してください",
+        "pasteHere": "ペーストここ",
+        "submitting": "安全に暗号化して送信する...",
+        "noCookies": "Cookiesを先に設定してください",
+        "statusLoadFailed": "状態の読み込みに失敗しました",
+        "thisPlatform": "このプラットフォーム",
         "instructions": {
             "bilibili": "📌 <b>対象：</b> <b>bilibili.com</b> にアクセスして Cookie を取得してください。",
             "douyin": "📌 <b>対象：</b> <b>douyin.com</b> にアクセスして Cookie を取得してください。",
