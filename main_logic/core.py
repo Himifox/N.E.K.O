@@ -862,6 +862,7 @@ class LLMSessionManager:
                     tts_config = self._config_manager.get_model_api_config('tts_custom')
                 else:
                     tts_config = self._config_manager.get_model_api_config('tts_default')
+                
                 self.tts_thread = Thread(
                     target=tts_worker,
                     args=(self.tts_request_queue, self.tts_response_queue, tts_config['api_key'], self.voice_id)
