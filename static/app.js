@@ -245,7 +245,7 @@ function init_app() {
     // 主动搭话功能相关
     let proactiveChatEnabled = false;
     let proactiveVisionEnabled = false;
-    let proactiveVisionChatEnabled = false;
+    let proactiveVisionChatEnabled = true;
     let proactiveNewsChatEnabled = false;
     let proactiveVideoChatEnabled = false;
     let mergeMessagesEnabled = false;
@@ -8883,8 +8883,8 @@ function init_app() {
                 // 主动视觉：从localStorage加载设置
                 proactiveVisionEnabled = settings.proactiveVisionEnabled ?? false;
                 window.proactiveVisionEnabled = proactiveVisionEnabled; // 同步到全局
-                // 视觉搭话：从localStorage加载设置
-                proactiveVisionChatEnabled = settings.proactiveVisionChatEnabled ?? false;
+                // 视觉搭话：从localStorage加载设置（默认开启，用户可手动关闭）
+                proactiveVisionChatEnabled = settings.proactiveVisionChatEnabled ?? true;
                 window.proactiveVisionChatEnabled = proactiveVisionChatEnabled; // 同步到全局
                 // 新闻搭话：从localStorage加载设置
                 proactiveNewsChatEnabled = settings.proactiveNewsChatEnabled ?? false;

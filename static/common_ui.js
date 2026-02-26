@@ -48,8 +48,14 @@ function setupResizableChatContainer() {
 
     const STORAGE_WIDTH_KEY = 'neko.chatContainerWidth';
     const STORAGE_HEIGHT_KEY = 'neko.chatContainerHeight';
-    const DEFAULT_WIDTH = 400;
-    const DEFAULT_HEIGHT = 500;
+    const BASE_WIDTH = 400;
+    const BASE_HEIGHT = 500;
+    const SCALE_BREAKPOINT = 1920;
+    const scaleFactor = window.innerWidth > SCALE_BREAKPOINT
+        ? Math.min(1.4, window.innerWidth / SCALE_BREAKPOINT)
+        : 1;
+    const DEFAULT_WIDTH = Math.round(BASE_WIDTH * scaleFactor);
+    const DEFAULT_HEIGHT = Math.round(BASE_HEIGHT * scaleFactor);
     const MIN_WIDTH = 320;
     const MIN_HEIGHT = 340;
 
