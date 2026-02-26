@@ -1,10 +1,16 @@
 /**
- * N.E.K.O 凭证录入脚本 - 企业级加固版 (最终稳健版)
- * 修复：异步翻译延迟导致的白屏、HTML 标签被破坏、蓝框坍塌
+ * N.E.K.O 凭证录入脚本
+ * 功能：
+ * 1. 支持多个平台的凭证录入
+ * 2. 提供详细的操作说明
+ * 3. 支持自定义字段配置
+ * 4. 自动检测并刷新状态
  */
 const PLATFORM_CONFIG_DATA = {
     'bilibili': {
-        name: 'Bilibili', icon: '📺', theme: '#4f46e5',
+        name: 'Bilibili', 
+        nameKey: 'cookiesLogin.platforms.bilibili',
+        icon: '📺', theme: '#4f46e5',
         instructionKey: 'cookiesLogin.instructions.bilibili',
         fields: [
             { key: 'SESSDATA', labelKey: 'cookiesLogin.fields.SESSDATA.label', descKey: 'cookiesLogin.fields.SESSDATA.desc', required: true },
@@ -14,7 +20,9 @@ const PLATFORM_CONFIG_DATA = {
         ]
     },
     'douyin': {
-        name: '抖音', icon: '🎵', theme: '#000000',
+        name: '抖音', 
+        nameKey: 'cookiesLogin.platforms.douyin', 
+        icon: '🎵', theme: '#000000',
         instructionKey: 'cookiesLogin.instructions.douyin',
         fields: [
             { key: 'sessionid', labelKey: 'cookiesLogin.fields.sessionid.label', descKey: 'cookiesLogin.fields.sessionid.desc', required: true },
@@ -24,7 +32,9 @@ const PLATFORM_CONFIG_DATA = {
         ]
     },
     'kuaishou': {
-        name: '快手', icon: '🧡', theme: '#ff5000',
+        name: '快手', 
+        nameKey: 'cookiesLogin.platforms.kuaishou', 
+        icon: '🧡', theme: '#ff5000',
         instructionKey: 'cookiesLogin.instructions.kuaishou',
         fields: [
             { key: 'kuaishou.server.web_st', mapKey: 'ks_web_st', labelKey: 'cookiesLogin.fields.ks_web_st.label', descKey: 'cookiesLogin.fields.ks_web_st.desc', required: true },
@@ -34,7 +44,9 @@ const PLATFORM_CONFIG_DATA = {
         ]
     },
     'weibo': {
-        name: '微博', icon: '🌏', theme: '#f59e0b',
+        name: '微博', 
+        nameKey: 'cookiesLogin.platforms.weibo', 
+        icon: '🌏', theme: '#f59e0b',
         instructionKey: 'cookiesLogin.instructions.weibo',
         fields: [
             { key: 'SUB', labelKey: 'cookiesLogin.fields.SUB.label', descKey: 'cookiesLogin.fields.SUB.desc', required: true },
@@ -42,7 +54,9 @@ const PLATFORM_CONFIG_DATA = {
         ]
     },
     'twitter': {
-        name: 'Twitter/X', icon: '🐦', theme: '#0ea5e9',
+        name: 'Twitter/X', 
+        nameKey: 'cookiesLogin.platforms.twitter', 
+        icon: '🐦', theme: '#0ea5e9',
         instructionKey: 'cookiesLogin.instructions.twitter',
         fields: [
             { key: 'auth_token', labelKey: 'cookiesLogin.fields.auth_token.label', descKey: 'cookiesLogin.fields.auth_token.desc', required: true },
@@ -50,7 +64,9 @@ const PLATFORM_CONFIG_DATA = {
         ]
     },
     'reddit': {
-        name: 'Reddit', icon: '👽', theme: '#ff4500',
+        name: 'Reddit', 
+        nameKey: 'cookiesLogin.platforms.reddit', 
+        icon: '👽', theme: '#ff4500',
         instructionKey: 'cookiesLogin.instructions.reddit',
         fields: [
             { key: 'reddit_session', labelKey: 'cookiesLogin.fields.reddit_session.label', descKey: 'cookiesLogin.fields.reddit_session.desc', required: true },
@@ -59,7 +75,7 @@ const PLATFORM_CONFIG_DATA = {
     }
 };
 
-// 🌟 修复：加强防范机制。如果字典还没加载好，坚决返回传入的中文后备(Fallback)
+// 如果字典还没加载好，坚决返回传入的中文后备(Fallback)
 const safeT = (key, fallback = '') => {
     if (typeof window.t !== 'function') return fallback;
     const result = window.t(key);
@@ -69,18 +85,29 @@ const safeT = (key, fallback = '') => {
 
 let PLATFORM_CONFIG = {};
 let currentPlatform = 'bilibili';
-let alertTimeout = null;
 
-// 🌟 修复：当语言切换时，重新初始化平台配置
+// 当语言切换时，重新初始化平台配置
 function initPlatformConfig() {
     PLATFORM_CONFIG = {};
     for (const [key, data] of Object.entries(PLATFORM_CONFIG_DATA)) {
+        
+        // 优先尝试翻译平台名称，如果翻译失败则回退到默认中文名
+        const translatedName = data.nameKey ? safeT(data.nameKey, data.name) : data.name;
+
+        // 如果是微博，教程里的目标网址显示为 m.weibo.cn
+        // 如果是其他平台，教程里的目标名称使用翻译后的名字 (例如 "TikTok")
+        const targetDisplay = key === 'weibo' ? 'm.weibo.cn' : translatedName;
+
         PLATFORM_CONFIG[key] = {
-            name: data.name,
+            name: translatedName, // 界面上显示的名称 (Tabs, 列表) 现在支持多语言了！
             icon: data.icon,
             theme: data.theme,
-            // 附带默认中文提示，防止蓝色框坍塌为空
-            instruction: data.instructionKey ? safeT(data.instructionKey, `📌 <b>目标：</b> 请前往 <b>${data.name}</b> 获取这些 Cookies。`) : '',
+            
+            // 附带默认中文提示，自动填入正确的域名或名称
+            // 如果字典里有 instructionKey，直接用字典的（字典通常自带了网址）
+            // 如果字典没有，则使用这里的模板，并填入 m.weibo.cn 或 翻译后的平台名
+            instruction: data.instructionKey ? safeT(data.instructionKey, `📌 <b>目标：</b> 请前往 <b>${targetDisplay}</b> 获取这些 Cookies。`) : '',
+            
             fields: data.fields.map(field => ({
                 key: field.key,
                 mapKey: field.mapKey,
@@ -121,10 +148,11 @@ function renderStaticHtmlI18n() {
 
 // 当语言切换时，动态更新 HTML 的 lang 属性
 function handleLocaleChange() {
-    // 动态更新 HTML 的 lang 属性（如果 i18next 存在的话）
+    // [新增] 动态更新页面语言标识
     if (window.i18next && window.i18next.language) {
         document.documentElement.lang = window.i18next.language;
     }
+
     initPlatformConfig();
     renderStaticHtmlI18n(); 
     switchTab(currentPlatform, document.querySelector('.tab-btn.active'), true);
@@ -199,6 +227,7 @@ function switchTab(platformKey, btnElement, isReRender = false) {
         submitText.textContent = `${config.name} ${translatedText}`;
     }
 }
+
 // 提交当前平台的 Cookies 配置
 async function submitCurrentCookie() {
     const config = PLATFORM_CONFIG[currentPlatform];
@@ -287,55 +316,86 @@ async function submitCurrentCookie() {
         if (submitText) submitText.textContent = originalBtnText;
     }
 }
+
 // 刷新当前平台的状态列表
+// 重新设计的状态监控列表渲染引擎 (修复缓存与状态判定问题)
 async function refreshStatusList() {
     const container = document.getElementById('platform-list-content');
     if (!container) return;
-    console.log("刷新平台：", currentPlatform);
     const platforms = Object.keys(PLATFORM_CONFIG);
     try {
         const results = await Promise.all(
-            platforms.map(p => fetch(`/api/auth/cookies/${p}`).then(r => r.json()).catch(() => ({ success: false })))
+            // 🌟 修复 1：强制禁用 GET 缓存，保证每次拉取的都是最新状态！
+            platforms.map(p => fetch(`/api/auth/cookies/${p}`, { cache: 'no-store' })
+                .then(r => r.json())
+                .catch(() => ({ success: false })))
         );
         container.textContent = '';
         results.forEach((res, idx) => {
             const key = platforms[idx];
             const cfg = PLATFORM_CONFIG[key];
-            const active = res.success && res.data?.has_cookies;
+            
+            // 兼容多种后端返回的数据结构
+            // 无论后端是 { success: true, data: { has_cookies: true } } 
+            // 还是 { success: true, has_cookies: true } 
+            // 都能被正确识别为 true
+            const active = res.success === true && (
+                res.has_cookies === true || 
+                res.data?.has_cookies === true || 
+                res.data === true
+            );
 
+            // 1. 卡片主容器
             const statusCard = document.createElement('div');
             statusCard.className = 'status-card';
-            statusCard.style.borderLeft = `4px solid ${active ? '#10b981' : '#cbd5e1'}`;
 
+            // 2. 左侧：图标与名称
             const statusInfo = document.createElement('div');
             statusInfo.className = 'status-info';
 
+            const iconWrapper = document.createElement('div');
+            iconWrapper.className = 'status-icon-wrapper';
+            iconWrapper.textContent = cfg.icon;
+
             const statusName = document.createElement('div');
             statusName.className = 'status-name';
-            statusName.textContent = `${cfg.icon} ${cfg.name}`;
+            statusName.textContent = cfg.name;
 
-            const statusTag = document.createElement('div');
-            statusTag.className = 'status-tag';
-            statusTag.style.color = active ? '#10b981' : '#94a3b8';
-            statusTag.textContent = active ? safeT('cookiesLogin.status.active', '生效中') : safeT('cookiesLogin.status.inactive', '未配置');
-
+            statusInfo.appendChild(iconWrapper);
             statusInfo.appendChild(statusName);
-            statusInfo.appendChild(statusTag);
 
+            // 3. 右侧：操作区（状态徽章 + 删除按钮）
+            const actionsWrapper = document.createElement('div');
+            actionsWrapper.className = 'status-actions';
+
+            // 获取翻译文本并过滤掉旧字典里的特殊符号（如 ○, ●）
+            let statusRawText = active ? safeT('cookiesLogin.status.active', '生效中') : safeT('cookiesLogin.status.inactive', '未配置');
+            
+            const statusTag = document.createElement('div');
+            statusTag.className = `status-tag ${active ? 'active' : 'inactive'}`;
+            statusTag.textContent = statusRawText.replace(/^[○●⚪🟢🔴]\s*/, '');
+            actionsWrapper.appendChild(statusTag);
+
+            // 若处于生效状态，添加红色的垃圾桶按钮
             if (active) {
                 const delBtn = document.createElement('button');
                 delBtn.className = 'del-btn';
-                delBtn.textContent = safeT('cookiesLogin.removeCredentials', '清除凭证');
+                delBtn.title = safeT('cookiesLogin.removeCredentials', '清除凭证');
+                delBtn.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>`;
                 delBtn.addEventListener('click', () => deleteCookie(key));
-                statusCard.appendChild(delBtn);
+                actionsWrapper.appendChild(delBtn);
             }
+
             statusCard.appendChild(statusInfo);
+            statusCard.appendChild(actionsWrapper);
             container.appendChild(statusCard);
         });
     } catch (e) {
         container.textContent = ''; 
         const errorText = document.createElement('div');
         errorText.className = 'error-text';
+        errorText.style.textAlign = 'center';
+        errorText.style.color = '#ef4444';
         errorText.textContent = safeT('cookiesLogin.statusLoadFailed', '状态加载失败');
         container.appendChild(errorText);
     }
@@ -361,15 +421,50 @@ async function deleteCookie(platformKey) {
     }
 }
 
-// 显示操作提示
+// ==========================================
+// 弹窗控制 (带内存泄漏防护)
+// ==========================================
+// 设置弹窗显示时间
+let alertTimeout = null;
+
+/**
+ * 安全清理定时器的辅助函数
+ * 作用：确保旧的倒计时被彻底销毁，防止逻辑冲突
+ */
+function clearAlertTimer() {
+    if (alertTimeout) {
+        clearTimeout(alertTimeout);
+        alertTimeout = null;
+    }
+}
+
 function showAlert(success, message) {
     const alertEl = document.getElementById('main-alert');
+    // 防御性编程：如果 DOM 元素不存在（比如页面已切换），直接终止，防止报错
     if (!alertEl) return;
-    clearTimeout(alertTimeout);
+
+    // 1. 立即清理上一次的定时器
+    // 这解决了 "用户连续点击保存，导致提示框闪烁或提前消失" 的问题
+    clearAlertTimer();
+    
+    // 2. 设置样式与内容
     alertEl.style.display = 'block';
     alertEl.style.backgroundColor = success ? '#ecfdf5' : '#fef2f2';
     alertEl.style.color = success ? '#059669' : '#dc2626';
     alertEl.style.borderColor = success ? '#a7f3d0' : '#fecaca';
     alertEl.textContent = message; 
-    alertTimeout = setTimeout(() => alertEl.style.display = 'none', 4000);
+
+    // 3. 开启新的定时器
+    alertTimeout = setTimeout(() => {
+        // 再次检查 DOM 是否存在 (防止 4秒内 页面被销毁导致报错)
+        if (alertEl) {
+            alertEl.style.display = 'none';
+        }
+        alertTimeout = null; // 倒计时结束，重置变量状态
+    }, 4000);
 }
+
+// 内存泄漏防护：当窗口关闭或页面卸载前，强制清理所有挂起的定时器
+window.addEventListener('beforeunload', () => {
+    clearAlertTimer();
+});
