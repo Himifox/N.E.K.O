@@ -59,55 +59,84 @@ def _extract_links_from_raw(mode: str, raw_data: dict) -> list[dict]:
     """
     从原始 web 数据中提取链接信息列表
     args:
-    - mode: 数据模式，必须是 'news', 'video', 或 'home'
-    - raw_data: 原始 web 数据，包含 'news', 'video', 'bilibili', 'weibo', 'reddit', 'twitter' 等字段
+    - mode: 数据模式，支持 'news', 'video', 'home', 'personal'
+    - raw_data: 原始 web 数据
     returns:
     - list[dict]: 包含链接信息的列表，每个元素包含 'title', 'url', 'source' 字段
     """
     links = []
     try:
         if mode == 'news':
-            # 微博 / Twitter
             news = raw_data.get('news', {})
             items = news.get('trending', [])
-            for item in items[:5]:
+            for item in items:
                 title = item.get('word', '') or item.get('name', '')
                 url = item.get('url', '')
                 if title and url:
                     links.append({'title': title, 'url': url, 'source': '微博' if raw_data.get('region', 'china') == 'china' else 'Twitter'})
         
         elif mode == 'video':
-            # B站 / Reddit
             video = raw_data.get('video', {})
             items = video.get('videos', []) or video.get('posts', [])
-            for item in items[:5]:
+            for item in items:
                 title = item.get('title', '')
                 url = item.get('url', '')
                 if title and url:
                     links.append({'title': title, 'url': url, 'source': 'B站' if raw_data.get('region', 'china') == 'china' else 'Reddit'})
         
         elif mode == 'home':
-            # 合并首页：bilibili + weibo 或 reddit + twitter
             bilibili = raw_data.get('bilibili', {})
-            for v in (bilibili.get('videos', []) or [])[:3]:
+            for v in (bilibili.get('videos', []) or []):
                 if v.get('title') and v.get('url'):
                     links.append({'title': v['title'], 'url': v['url'], 'source': 'B站'})
             
             weibo = raw_data.get('weibo', {})
-            for w in (weibo.get('trending', []) or [])[:3]:
+            for w in (weibo.get('trending', []) or []):
                 if w.get('word') and w.get('url'):
                     links.append({'title': w['word'], 'url': w['url'], 'source': '微博'})
             
             reddit = raw_data.get('reddit', {})
-            for r in (reddit.get('posts', []) or [])[:3]:
+            for r in (reddit.get('posts', []) or []):
                 if r.get('title') and r.get('url'):
                     links.append({'title': r['title'], 'url': r['url'], 'source': 'Reddit'})
             
             twitter = raw_data.get('twitter', {})
-            for t in (twitter.get('trending', []) or [])[:3]:
+            for t in (twitter.get('trending', []) or []):
                 title = t.get('name', '') or t.get('word', '')
                 if title and t.get('url'):
                     links.append({'title': title, 'url': t['url'], 'source': 'Twitter'})
+
+        elif mode == 'personal':
+            region = raw_data.get('region', 'china')
+            if region == 'china':
+                b_dyn = raw_data.get('bilibili_dynamic', {})
+                for d in (b_dyn.get('dynamics', []) or []):
+                    title = d.get('content', '')
+                    url = d.get('url', '')
+                    if title and url:
+                        links.append({'title': title, 'url': url, 'source': 'B站'})
+                
+                w_dyn = raw_data.get('weibo_dynamic', {})
+                for d in (w_dyn.get('statuses', []) or []):
+                    title = d.get('content', '')
+                    url = d.get('url', '')
+                    if title and url:
+                        links.append({'title': title, 'url': url, 'source': '微博'})
+            else:
+                r_dyn = raw_data.get('reddit_dynamic', {})
+                for d in (r_dyn.get('posts', []) or []):
+                    title = d.get('title', '') or d.get('content', '')
+                    url = d.get('url', '')
+                    if title and url:
+                        links.append({'title': title, 'url': url, 'source': 'Reddit'})
+                
+                t_dyn = raw_data.get('twitter_dynamic', {})
+                for d in (t_dyn.get('tweets', []) or []):
+                    title = d.get('content', '')
+                    url = d.get('url', '')
+                    if title and url:
+                        links.append({'title': title, 'url': url, 'source': 'Twitter'})
+
     except Exception as e:
         logger.warning(f"提取链接失败 [{mode}]: {e}")
     return links
@@ -124,13 +153,15 @@ def _parse_web_screening_result(text: str) -> dict | None:
     返回 dict(title, source, number) 或 None
     """
     result = {}
+    # ^ + re.MULTILINE 锚定行首，防止匹配到 "有值得分享的话题：" 等前缀行
+    # [ \t]* 替代 \s*，只吃水平空白，避免跨行捕获到下一行内容
     patterns = {
-        'title': r'(?:话题|Topic|話題|주제)\s*[：:]\s*(.+)',
-        'source': r'(?:来源|Source|出典|출처)\s*[：:]\s*(.+)',
-        'number': r'(?:序号|No|番号|번호)\.?\s*[：:]\s*(\d+)',
+        'title': r'^[ \t]*(?:话题|Topic|話題|주제)[ \t]*[：:][ \t]*(.+)',
+        'source': r'^[ \t]*(?:来源|Source|出典|출처)[ \t]*[：:][ \t]*(.+)',
+        'number': r'^[ \t]*(?:序号|No|番号|번호)\.?[ \t]*[：:][ \t]*(\d+)',
     }
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
         if match:
             result[key] = match.group(1).strip()
     

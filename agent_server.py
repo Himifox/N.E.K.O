@@ -116,6 +116,9 @@ def _try_refresh_computer_use_adapter(force: bool = False) -> bool:
         return False
 
 
+_llm_check_lock = asyncio.Lock()
+
+
 async def _fire_agent_llm_connectivity_check() -> None:
     """Probe the shared Agent-LLM endpoint in a background thread.
 
@@ -123,36 +126,57 @@ async def _fire_agent_llm_connectivity_check() -> None:
     so a single connectivity check covers both capabilities.  Updates
     ``init_ok`` on the CUA adapter and refreshes the capability cache for
     *both* computer_use and browser_use.
+
+    Uses a lock to prevent concurrent probes from racing.
     """
-    adapter = Modules.computer_use
-    if adapter is None:
+    if _llm_check_lock.locked():
         return
 
-    def _probe():
-        return adapter.check_connectivity()
+    async with _llm_check_lock:
+        adapter = Modules.computer_use
+        if adapter is None:
+            return
 
-    try:
-        ok = await asyncio.get_event_loop().run_in_executor(None, _probe)
-        reason = "" if ok else (adapter.last_error or "Agent LLM unreachable")
-        _set_capability("computer_use", ok, reason)
-        # BrowserUse shares the same agent endpoint — mirror the LLM result
-        # but also respect its own import-readiness gate.
-        bu = Modules.browser_use
-        if bu is not None:
-            if not ok:
-                _set_capability("browser_use", False, reason)
-            elif not getattr(bu, "_ready_import", False):
-                _set_capability("browser_use", False, f"browser-use not installed: {bu.last_error}")
+        def _probe():
+            return adapter.check_connectivity()
+
+        try:
+            ok = await asyncio.get_event_loop().run_in_executor(None, _probe)
+            reason = "" if ok else (adapter.last_error or "Agent LLM unreachable")
+            _set_capability("computer_use", ok, reason)
+            bu = Modules.browser_use
+            if bu is not None:
+                if not ok:
+                    _set_capability("browser_use", False, reason)
+                elif not getattr(bu, "_ready_import", False):
+                    _set_capability("browser_use", False, f"browser-use not installed: {bu.last_error}")
+                else:
+                    _set_capability("browser_use", True, "")
+
+            if ok:
+                logger.info("[Agent] Agent-LLM connectivity check passed")
             else:
-                _set_capability("browser_use", True, "")
-        if ok:
-            logger.info("[Agent] Agent-LLM connectivity check passed")
-        else:
-            logger.warning("[Agent] Agent-LLM connectivity check failed: %s", reason)
-    except Exception as e:
-        logger.warning("[Agent] Agent-LLM connectivity check error: %s", e)
-        _set_capability("computer_use", False, str(e))
-        _set_capability("browser_use", False, str(e))
+                logger.warning("[Agent] Agent-LLM connectivity check failed: %s", reason)
+                if Modules.agent_flags.get("computer_use_enabled"):
+                    Modules.agent_flags["computer_use_enabled"] = False
+                    Modules.notification = f"已自动关闭键鼠控制: {reason}"
+                if Modules.agent_flags.get("browser_use_enabled"):
+                    Modules.agent_flags["browser_use_enabled"] = False
+                    Modules.notification = f"已自动关闭浏览器控制: {reason}"
+
+            _bump_state_revision()
+            await _emit_agent_status_update()
+        except Exception as e:
+            logger.warning("[Agent] Agent-LLM connectivity check error: %s", e)
+            _set_capability("computer_use", False, str(e))
+            _set_capability("browser_use", False, str(e))
+            if Modules.agent_flags.get("computer_use_enabled"):
+                Modules.agent_flags["computer_use_enabled"] = False
+            if Modules.agent_flags.get("browser_use_enabled"):
+                Modules.agent_flags["browser_use_enabled"] = False
+            Modules.notification = f"Agent LLM 连接检查异常: {e}"
+            _bump_state_revision()
+            await _emit_agent_status_update()
 
 
 def _bump_state_revision() -> int:
@@ -341,6 +365,9 @@ def _collect_agent_status_snapshot() -> Dict[str, Any]:
                 })
         except Exception:
             continue
+    note = Modules.notification
+    if Modules.notification:
+        Modules.notification = None
     return {
         "revision": Modules.state_revision,
         "server_online": True,
@@ -349,6 +376,7 @@ def _collect_agent_status_snapshot() -> Dict[str, Any]:
         "gate": gate,
         "capabilities": capabilities,
         "active_tasks": active_tasks,
+        "notification": note,
         "updated_at": _now_iso(),
     }
 
@@ -1116,10 +1144,8 @@ async def set_agent_flags(payload: Dict[str, Any]):
                 Modules.notification = "无法开启 Computer Use: 模块未加载"
                 logger.warning("[Agent] Cannot enable Computer Use: Module not loaded")
             elif not getattr(Modules.computer_use, "init_ok", False):
-                # Connectivity not yet confirmed — kick off a check then
-                # optimistically enable; the check result will auto-disable
-                # if it fails.
                 Modules.agent_flags["computer_use_enabled"] = True
+                Modules.notification = "键鼠控制已开启，Agent LLM 连接确认中..."
                 asyncio.ensure_future(_fire_agent_llm_connectivity_check())
             else:
                 try:
@@ -1152,6 +1178,7 @@ async def set_agent_flags(payload: Dict[str, Any]):
                 Modules.notification = f"无法开启 Browser Use: browser-use not installed: {bu.last_error}"
             elif not getattr(Modules.computer_use, "init_ok", False):
                 Modules.agent_flags["browser_use_enabled"] = True
+                Modules.notification = "浏览器控制已开启，Agent LLM 连接确认中..."
                 asyncio.ensure_future(_fire_agent_llm_connectivity_check())
             else:
                 Modules.agent_flags["browser_use_enabled"] = True
