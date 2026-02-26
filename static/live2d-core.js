@@ -554,4 +554,3 @@ window.addEventListener('neko-render-quality-changed', (e) => {
         });
     }
 });
-

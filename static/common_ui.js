@@ -256,52 +256,6 @@ function triggerExpandSnap() {
     // 兼容存在过渡/尺寸变化的情况
     setTimeout(() => window.ChatDialogSnap.snapIntoScreen({ animate: true }), 320);
 }
-// /**
-//  * 锁定聊天框切换按钮，防止重复点击导致的动画冲突
-//  * @returns {boolean} 是否成功锁定按钮
-//  */
-// // 锁定聊天框切换按钮，防止重复点击
-// function lockChatToggleButton() {
-//     if (!toggleBtn) return false;
-    
-//     isClosingAnimationInProgress = true;
-    
-//     // 禁用按钮点击
-//     toggleBtn.style.pointerEvents = 'none';
-//     toggleBtn.style.opacity = '0.6';
-//     toggleBtn.style.cursor = 'not-allowed';
-    
-//     // 添加视觉提示
-//     toggleBtn.setAttribute('data-locked', 'true');
-    
-//     console.log('[ChatBox] 聊天框切换按钮已锁定');
-// }
-
-// /**
-//  * 解锁聊天框切换按钮，允许点击
-//  * @returns {boolean} 是否成功解锁按钮
-//  */
-// // 解锁聊天框切换按钮
-// function unlockChatToggleButton() {
-//     if (!toggleBtn) return false;
-    
-//     isClosingAnimationInProgress = false;
-    
-//     // 恢复按钮状态
-//     toggleBtn.style.pointerEvents = 'auto';
-//     toggleBtn.style.opacity = '1';
-//     toggleBtn.style.cursor = 'pointer';
-    
-//     // 移除视觉提示
-//     toggleBtn.removeAttribute('data-locked');
-    
-//     console.log('[ChatBox] 聊天框切换按钮已解锁');
-// }
-
-// // 检查是否正在执行关闭动画
-// function isChatClosingAnimationInProgress() {
-//     return isClosingAnimationInProgress;
-// }
 
 // 确保DOM加载后再绑定事件
 if (toggleBtn) {
