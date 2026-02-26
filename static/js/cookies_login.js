@@ -9,7 +9,7 @@
 const PLATFORM_CONFIG_DATA = {
     'bilibili': {
         name: 'Bilibili', 
-        nameKey: 'cookiesLogin.platforms.bilibili',
+        nameKey: 'cookiesLogin.bilibili',
         icon: '📺', theme: '#4f46e5',
         instructionKey: 'cookiesLogin.instructions.bilibili',
         fields: [
