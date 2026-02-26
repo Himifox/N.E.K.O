@@ -1503,7 +1503,7 @@ class LLMSessionManager:
         try:
             ws = self.websocket
             if ws and hasattr(ws, 'client') and ws.client:
-                is_local = ws.client.host in ('127.0.0.1', '::1', 'localhost', '0.0.0.0')
+                is_local = ws.client.host in ('127.0.0.1', '::1', 'localhost')
         except Exception:
             pass
         if is_local:

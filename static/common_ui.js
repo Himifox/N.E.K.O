@@ -716,22 +716,20 @@ if (toggleBtn) {
         }, { passive: false });
     }
     
-    // 输入区域：点击空白处（不是输入框、按钮等）可以拖动
+    // 输入区域整体可拖动，但排除 textarea/button 等交互子元素
     if (textInputArea) {
+        const isInteractiveTarget = (el) =>
+            !!el.closest('textarea, input, button, select, a, [contenteditable]');
+
         textInputArea.addEventListener('mousedown', (e) => {
-            if (!isCollapsed()) {
-                // 只有点击空白区域才拖动，不包括输入框、按钮等交互元素
-                if (e.target === textInputArea) {
-                    startDrag(e);
-                }
+            if (!isCollapsed() && !isInteractiveTarget(e.target)) {
+                startDrag(e);
             }
         });
-        
+
         textInputArea.addEventListener('touchstart', (e) => {
-            if (!isCollapsed()) {
-                if (e.target === textInputArea) {
-                    startDrag(e);
-                }
+            if (!isCollapsed() && !isInteractiveTarget(e.target)) {
+                startDrag(e);
             }
         }, { passive: false });
     }

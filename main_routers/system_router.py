@@ -1093,7 +1093,7 @@ async def backend_screenshot(request: Request):
     安全限制：仅允许来自 loopback 地址的请求。返回 JPEG base64 DataURL。
     """
     client_host = request.client.host if request.client else ''
-    if client_host not in ('127.0.0.1', '::1', 'localhost', '0.0.0.0'):
+    if client_host not in ('127.0.0.1', '::1', 'localhost'):
         return JSONResponse({"success": False, "error": "only available from localhost"}, status_code=403)
 
     try:
