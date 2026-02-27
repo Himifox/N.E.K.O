@@ -1015,7 +1015,28 @@
         "deleteFailed": "削除失敗",
         "deleteError": "削除失敗：{{error}}",
         "freePresetLabel": "無料プリセット",
-        "freePresetBadge": "プリセット"
+        "freePresetBadge": "プリセット",
+        "silenceModal": {
+            "title": "スマート無音検出結果",
+            "originalDuration": "元の音声の長さ",
+            "silenceDuration": "除去可能な無音の長さ",
+            "estimatedDuration": "処理後の予想長さ",
+            "savingPercentage": "節約率",
+            "processing": "処理中...",
+            "analyzing": "分析中...",
+            "trimming": "トリミング中...",
+            "done": "完了",
+            "cancelled": "キャンセル済み",
+            "trimSuccess": "✅ トリミング完了！",
+            "downloadTrimmed": "処理済み音声をダウンロード",
+            "useTrimmed": "スマートトリミング音声を使用",
+            "useOriginal": "元の音声をアップロード",
+            "cancel": "キャンセル",
+            "noSilence": "除去可能な無音区間は検出されませんでした",
+            "trimError": "トリミング失敗: {{error}}",
+            "trimmedLabel": "[トリミング済]",
+            "confirmTrimmed": "トリミング済み音声を使用"
+        }
     },
     "memory": {
         "title": "メモリブラウザ",
@@ -1319,7 +1340,8 @@
             "disconnected": "サーバー接続が失われました",
             "agentDisconnected": "エージェントサーバー接続が失われました",
             "freeModelWarning": "クォータの制限により、無料モデルではAgentモードがブロックされやすくなります。有料モデルへの切り替えをお勧めします。\n\nすでに有料APIを設定済みの場合は、NEKOを再起動してみてください。",
-            "freeModelWarningTitle": "無料モデルのお知らせ"
+            "freeModelWarningTitle": "無料モデルのお知らせ",
+            "connectivityCheck": "Agent LLM 接続チェック中..."
         },
         "quotaExceeded": "無料 Agent モデルの本日の試用上限（{{limit}}回）に達しました。明日もう一度お試しください。",
         "taskHud": {

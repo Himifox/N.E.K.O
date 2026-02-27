@@ -1015,7 +1015,28 @@
         "deleteFailed": "삭제 실패",
         "deleteError": "삭제 실패: {{error}}",
         "freePresetLabel": "무료 사전 설정",
-        "freePresetBadge": "사전 설정"
+        "freePresetBadge": "사전 설정",
+        "silenceModal": {
+            "title": "스마트 무음 감지 결과",
+            "originalDuration": "원본 오디오 길이",
+            "silenceDuration": "제거 가능한 무음 길이",
+            "estimatedDuration": "처리 후 예상 길이",
+            "savingPercentage": "절약 비율",
+            "processing": "처리 중...",
+            "analyzing": "분석 중...",
+            "trimming": "트리밍 중...",
+            "done": "완료",
+            "cancelled": "취소됨",
+            "trimSuccess": "✅ 트리밍 완료!",
+            "downloadTrimmed": "처리된 오디오 다운로드",
+            "useTrimmed": "스마트 트리밍 오디오 사용",
+            "useOriginal": "원본 오디오 업로드",
+            "cancel": "취소",
+            "noSilence": "제거 가능한 무음 구간이 감지되지 않았습니다",
+            "trimError": "트리밍 실패: {{error}}",
+            "trimmedLabel": "[트리밍됨]",
+            "confirmTrimmed": "트리밍된 오디오 사용"
+        }
     },
     "memory": {
         "title": "메모리 브라우저",
@@ -1319,7 +1340,8 @@
             "disconnected": "서버 연결이 끊어졌습니다.",
             "agentDisconnected": "에이전트 서버 연결이 끊어졌습니다.",
             "freeModelWarning": "할당량 제한으로 인해 무료 모델은 Agent 모드에서 차단되기 쉽습니다. 유료 모델로 전환하는 것을 권장합니다.\n\n이미 유료 API를 설정한 경우 NEKO를 재시작해 보세요.",
-            "freeModelWarningTitle": "무료 모델 안내"
+            "freeModelWarningTitle": "무료 모델 안내",
+            "connectivityCheck": "Agent LLM 연결 확인 중..."
         },
         "quotaExceeded": "무료 Agent 모델의 일일 체험 한도({{limit}}회)에 도달했습니다. 내일 다시 시도해 주세요.",
         "taskHud": {
