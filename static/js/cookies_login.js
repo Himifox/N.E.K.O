@@ -205,7 +205,7 @@ function switchTab(platformKey, btnElement, isReRender = false) {
 
         const placeholderBase = safeT('cookiesLogin.pasteHere', '在此粘贴');
         // 渲染动态 Cookies 配置字段
-        fieldsContainer.innerHTML = config.fields.map(f => {
+        fieldsContainer.innerHTML = config.fields.map((f, index) => {
             const inputId = `input-${f.mapKey || f.key}`;
 
             return `
@@ -215,11 +215,19 @@ function switchTab(platformKey, btnElement, isReRender = false) {
                     <span class="desc">${DOMPurify.sanitize(f.desc)}</span>
                 </label>
                 <input type="text" id="${inputId}" 
-                       placeholder="${placeholderBase} ${DOMPurify.sanitize(f.key)}..." 
+                       data-field-index="${index}"
                        autocomplete="off" 
                        class="credential-input">
             </div>
         `}).join('');
+
+         fieldsContainer.querySelectorAll('.credential-input').forEach((inputEl) => {
+            const idx = Number(inputEl.getAttribute('data-field-index'));
+            const field = config.fields[idx];
+            if (field) {
+                inputEl.placeholder = `${placeholderBase} ${field.key}...`;
+            }
+        });
         
         if (isReRender) {
             Object.entries(existingValues).forEach(([id, preservedValue]) => {
@@ -269,8 +277,16 @@ async function submitCurrentCookie() {
                 const message = safeT('cookiesLogin.whitespaceTrimmed', '{{fieldName}} 已自动去除首尾空格').replace('{{fieldName}}', f.label);
                 showAlert(false, message);
             }
-            if (!sanitizedVal) 
+            if (!sanitizedVal) {
+                if (f.required) {
+                    const message = safeT('cookiesLogin.requiredField', '请填写必填项: {{fieldName}}')
+                        .replace('{{fieldName}}', f.label);
+                    showAlert(false, message);
+                    inputEl?.focus();
+                    return;
+                }
                 continue;
+            }
             cookiePairs.push(`${f.key}=${sanitizedVal}`);
         }
     }
