@@ -177,7 +177,9 @@ function switchTab(platformKey, btnElement, isReRender = false) {
     const config = PLATFORM_CONFIG[platformKey];
     // 更新选项卡文本
     if (btnElement) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(btn =>{
+             btn.classList.remove('active');
+        });
         btnElement.classList.add('active');
     }
     // 更新面板描述
@@ -243,17 +245,18 @@ async function submitCurrentCookie() {
     for (const f of config.fields) {
         const fieldId = `input-${f.mapKey || f.key}`;
         const inputEl = document.getElementById(fieldId);
-        const val = inputEl ? inputEl.value.trim() : '';
+        const rawVal = inputEl ? inputEl.value : '';
+        const val = rawVal;
         // 检查必填项
-        if (f.required && !val) {
+        if (f.required && !rawVal.trim()) {
             const message = safeT('cookiesLogin.requiredField', '请填写必填项: {{fieldName}}').replace('{{fieldName}}', f.label);
             showAlert(false, message);
             inputEl?.focus();
             return;
         }
         // 过滤非法字符
-        if (val) {
-            let sanitizedVal = val;
+        if (rawVal !== '') {
+            let sanitizedVal = rawVal;
             if (/[\r\n\t<>'";]/.test(sanitizedVal)) {
                 sanitizedVal = sanitizedVal.replace(/[\r\n\t]/g, '').replace(/[<>'"]/g, '').replace(/;/g, '');
                 const message = safeT('cookiesLogin.invalidChars', '{{fieldName}} 包含非法字符，已自动过滤').replace('{{fieldName}}', f.label);
@@ -266,7 +269,8 @@ async function submitCurrentCookie() {
                 const message = safeT('cookiesLogin.whitespaceTrimmed', '{{fieldName}} 已自动去除首尾空格').replace('{{fieldName}}', f.label);
                 showAlert(false, message);
             }
-            
+            if (!sanitizedVal) 
+                continue;
             cookiePairs.push(`${f.key}=${sanitizedVal}`);
         }
     }
@@ -301,7 +305,7 @@ async function submitCurrentCookie() {
         // 检查是否成功保存
         if (result.success) {
             const message = safeT('cookiesLogin.credentialsSaved', '{{platformName}} 凭证已保存').replace('{{platformName}}', config.name);
-            showAlert(true, `✅ ${message}`);
+            showAlert(true, message);
             document.querySelectorAll('.credential-input').forEach(i => i.value = '');
             refreshStatusList();
         } else {
@@ -332,7 +336,7 @@ async function refreshStatusList() {
     const platforms = Object.keys(PLATFORM_CONFIG);
     try {
         const results = await Promise.all(
-            // 🌟 修复 1：强制禁用 GET 缓存，保证每次拉取的都是最新状态！
+            // 强制禁用 GET 缓存，保证每次拉取的都是最新状态！
             platforms.map(p => fetch(`/api/auth/cookies/${p}`, { cache: 'no-store' })
                 .then(r => r.json())
                 .catch(() => ({ success: false })))
