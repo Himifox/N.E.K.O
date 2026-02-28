@@ -108,7 +108,25 @@ jobs:
           uv venv .venv
           uv sync
           uv pip install --python .venv nuitka ordered-set zstandard
-          uv pip install --python .venv bilibili_api_pathchange-0.1.0-py3-none-any.whl
+          # 检查并安装本地修改的bilibili-api包
+          echo "检查wheel文件..."
+          if [ -f "bilibili_api_pathchange-0.1.0-py3-none-any.whl" ]; then
+            echo "找到wheel文件，开始安装..."
+            uv pip install --python .venv bilibili_api_pathchange-0.1.0-py3-none-any.whl
+          else
+            echo "警告：未找到wheel文件，尝试从源码安装..."
+          # 如果wheel文件不存在，尝试从源码安装
+            if [ -d "bilibili_api_pathchange" ]; then
+              uv pip install --python .venv -e bilibili_api_pathchange/
+            else
+              echo "错误：未找到bilibili_api_pathchange源码目录"
+              exit 1
+            fi
+          fi
+
+          # 验证包安装
+          echo "验证包安装..."
+          .venv/bin/python -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
 
       # --- Generate runtime config files (not tracked in git) ---
       - name: Generate default config files
@@ -258,8 +276,13 @@ jobs:
           # and adding package-data would conflict with the exe at the same path.
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=jinja2"
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=certifi"
-          NUITKA_OPTS="$NUITKA_OPTS --include-package-data=bilibili_api_pathchange"
 
+          if .venv/bin/python -c "import bilibili_api_pathchange" 2>/dev/null; then
+            NUITKA_OPTS="$NUITKA_OPTS --include-package-data=bilibili_api_pathchange"
+            echo "包含bilibili_api_pathchange包数据"
+          else
+            echo "警告：bilibili_api_pathchange包未安装，跳过包含"
+          fi
           # Exclusions
           NUITKA_OPTS="$NUITKA_OPTS --nofollow-import-to=plugin.plugins"
           NUITKA_OPTS="$NUITKA_OPTS --nofollow-import-to=audiolab"
@@ -364,12 +387,18 @@ jobs:
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=playwright
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=jinja2
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=certifi
-          set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api_pathchange
           set NUITKA_OPTS=%NUITKA_OPTS% --enable-plugin=dill-compat
           set NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=matplotlib
           set NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pytest
           set NUITKA_OPTS=%NUITKA_OPTS% --windows-console-mode=force
           set NUITKA_OPTS=%NUITKA_OPTS% --assume-yes-for-downloads
+          .venv/Scripts/python.exe -c "import bilibili_api_pathchange" 2>nul
+          if %errorlevel% equ 0 (
+            set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api_pathchange
+            echo 包含bilibili_api_pathchange包数据
+          ) else (
+            echo 警告：bilibili_api_pathchange包未安装，跳过包含
+          )
 
           .venv\Scripts\python.exe -m nuitka %NUITKA_OPTS% launcher.py
 
