@@ -190,7 +190,7 @@ jobs:
             Write-Warning "Playwright Chromium install failed; will download on first run."
           }
 
-      # --- Build with Nuitka ---
+      # --- Build with Nuitka (Unix) ---
       - name: Build with Nuitka (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -246,6 +246,8 @@ jobs:
           NUITKA_OPTS="$NUITKA_OPTS --include-package=browser_use"
           NUITKA_OPTS="$NUITKA_OPTS --include-package=browser_use_sdk"
           NUITKA_OPTS="$NUITKA_OPTS --include-package=playwright"
+          # 新增：显式包含bilibili_api包
+          NUITKA_OPTS="$NUITKA_OPTS --include-package=bilibili_api"
 
           # Package data
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=audiolab"
@@ -257,6 +259,8 @@ jobs:
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=jinja2"
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=certifi"
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=bilibili_api"
+          # 关键修复：显式包含bilibili_api的所有JSON文件
+          NUITKA_OPTS="$NUITKA_OPTS --include-data-dir=$(.venv/bin/python -c 'import bilibili_api, os; print(os.path.dirname(bilibili_api.__file__))')=bilibili_api"
 
           # Exclusions
           NUITKA_OPTS="$NUITKA_OPTS --nofollow-import-to=plugin.plugins"
@@ -362,6 +366,10 @@ jobs:
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=jinja2
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=certifi
           set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api
+          set NUITKA_OPTS=%NUITKA_OPTS% --include-package=bilibili_api
+          # 关键修复：Windows下显式获取bilibili_api路径并包含
+          for /f "delims=" %%i in ('".venv\Scripts\python.exe" -c "import bilibili_api, os; print(os.path.dirname(bilibili_api.__file__))"') do set BILIBILI_API_PATH=%%i
+          set NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir="%BILIBILI_API_PATH%"=bilibili_api
           set NUITKA_OPTS=%NUITKA_OPTS% --enable-plugin=dill-compat
           set NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=matplotlib
           set NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pytest
@@ -383,6 +391,9 @@ jobs:
             cp -R playwright_browsers dist/Xiao8/playwright_browsers
             echo "Copied playwright_browsers into dist/Xiao8/"
           fi
+          # 新增：验证bilibili_api的JSON文件是否存在
+          echo "=== Check bilibili-api JSON files ==="
+          find dist/Xiao8 -name "*.json" -path "*/bilibili_api/*" || echo "No bilibili-api JSON files found!"
           echo "=== Build output ==="
           ls -la dist/Xiao8/ || echo "dist/Xiao8 not found!"
 
