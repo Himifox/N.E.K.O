@@ -25,7 +25,7 @@ logger = get_module_logger(__name__)
 # ==================================================
 # 从 bilibili_api 导入 B站 API的 JSON 文件功能
 # ==================================================
-from bilibili_api_pathchange import set_data_dir
+from bilibili_api import set_data_dir
 set_data_dir("config/bilibili_api_data")
 
 # ==================================================
@@ -106,7 +106,7 @@ def get_random_user_agent() -> str:
 
 def _get_bilibili_credential() -> Any | None:
     try:
-        from bilibili_api_pathchange import Credential
+        from bilibili_api import Credential
         cookies = _get_platform_cookies('bilibili')
         if not cookies:
             return None
@@ -137,7 +137,7 @@ async def fetch_bilibili_trending(limit: int = 30) -> Dict[str, Any]:
     支持个性化推荐（如果提供了认证信息）
     """
     try:
-        from bilibili_api_pathchange import homepage
+        from bilibili_api import homepage
         # 获取认证信息（如果有）
         credential = _get_bilibili_credential()
         
