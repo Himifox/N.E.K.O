@@ -128,9 +128,9 @@ jobs:
           echo "验证包安装..."
           echo "验证包安装..."
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            .venv/Scripts/python.exe -c "import bilibili-api-pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
+            .venv/Scripts/python.exe -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
           else
-            .venv/bin/python -c "import bilibili-api-pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
+            .venv/bin/python -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
           fi
       # --- Generate runtime config files (not tracked in git) ---
       - name: Generate default config files
@@ -287,7 +287,7 @@ jobs:
             PYTHON_EXEC=".venv/bin/python"
           fi
 
-          if $PYTHON_EXEC -c "import bilibili-api-pathchange" 2>/dev/null; then
+          if $PYTHON_EXEC -c "import bilibili_api_pathchange" 2>/dev/null; then
             NUITKA_OPTS="$NUITKA_OPTS --include-package-data=bilibili-api-pathchange"
             echo "包含bilibili-api-pathchange包数据"
           else
@@ -402,7 +402,7 @@ jobs:
           set NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pytest
           set NUITKA_OPTS=%NUITKA_OPTS% --windows-console-mode=force
           set NUITKA_OPTS=%NUITKA_OPTS% --assume-yes-for-downloads
-          .venv/Scripts/python.exe -c "import bilibili-api-pathchange" 2>nul
+          .venv/Scripts/python.exe -c "import bilibili_api_pathchange" 2>nul
           if %errorlevel% equ 0 (
             set NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili-api-pathchange
             echo 包含bilibili-api-pathchange包数据
