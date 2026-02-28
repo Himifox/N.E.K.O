@@ -313,9 +313,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          :: ==============================================
-          :: 第一步：确保bilibili_api已安装（避免导入失败）
-          :: ==============================================
+          :: 第一步：确保bilibili_api已安装
           .venv\Scripts\python.exe -c "import bilibili_api" 2>nul
           if errorlevel 1 (
               echo ⚠️ bilibili_api not found, installing now...
@@ -324,123 +322,40 @@ jobs:
               echo ✅ bilibili_api is already installed
           )
       
-          :: ==============================================
-          :: 第二步：初始化Nuitka参数（纯CMD语法，无特殊符号）
-          :: ==============================================
-          set "NUITKA_OPTS=--standalone --output-dir=dist --output-filename=projectneko_server.exe"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --windows-icon-from-ico=assets/icon.ico"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --company-name=Project N.E.K.O."
-          set "NUITKA_OPTS=%NUITKA_OPTS% --product-name=N.E.K.O. AI Assistant"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --file-version=1.0.0.0"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --product-version=1.0.0.0"
-      
-          :: 配置数据文件（逐个添加，避免行过长）
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/__init__.py=config/__init__.py"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/api_providers.json=config/api_providers.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.json=config/characters.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.en.json=config/characters.en.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.ja.json=config/characters.ja.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.ko.json=config/characters.ko.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.zh-CN.json=config/characters.zh-CN.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/characters.zh-TW.json=config/characters.zh-TW.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/core_config.json=config/core_config.json"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/prompts_chara.py=config/prompts_chara.py"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/prompts_sys.py=config/prompts_sys.py"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=config/user_preferences.json=config/user_preferences.json"
-      
-          :: 配置数据目录
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=assets=assets"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=templates=templates"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=data/browser_use_prompts=data/browser_use_prompts"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=playwright_browsers=playwright_browsers"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=static=static"
-      
-          :: 配置包含的包
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=uvicorn"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=fastapi"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=starlette"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=jinja2"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=websockets"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=langchain_community"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=langchain_core"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=langchain_openai"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=main_server"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=memory_server"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=agent_server"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=config"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=brain"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=main_logic"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=main_routers"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=memory"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=plugin.plugins"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=utils"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=steamworks"
-      
-          :: Steam相关文件
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=steam_api64.dll=steam_api64.dll"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=steam_api64.lib=steam_api64.lib"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=SteamworksPy64.dll=SteamworksPy64.dll"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-files=steam_appid.txt=steam_appid.txt"
-      
-          :: 排除不需要的包
-          set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=audiolab"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pyrnnoise"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=audiolab"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=pyrnnoise"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=browser_use"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=browser_use"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=browser_use_sdk"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=playwright"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=playwright"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=jinja2"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=certifi"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=bilibili_api"
-      
-          :: ==============================================
-          :: 第三步：稳定获取bilibili_api路径（纯CMD语法）
-          :: ==============================================
-          set "BILIBILI_API_PATH="
-          :: 方式1：直接指向虚拟环境的site-packages（最稳定）
-          set "SITE_PACKAGES_PATH=.venv\Lib\site-packages"
-          if exist "%SITE_PACKAGES_PATH%\bilibili_api" (
-              set "BILIBILI_API_PATH=%SITE_PACKAGES_PATH%\bilibili_api"
-          ) else (
-              :: 方式2：备用 - 通过Python获取
-              for /f "delims=" %%i in ('".venv\Scripts\python.exe" -c "import bilibili_api, os; print(os.path.dirname(bilibili_api.__file__))" 2^>nul') do set "BILIBILI_API_PATH=%%i"
-          )
-      
-          :: 添加bilibili_api路径参数
-          if defined BILIBILI_API_PATH (
-              if exist "%BILIBILI_API_PATH%" (
-                  set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=%BILIBILI_API_PATH%=bilibili_api"
-                  echo ✅ bilibili_api path: %BILIBILI_API_PATH%
-                  :: 验证JSON文件是否存在
-                  dir "%BILIBILI_API_PATH%\*.json" 2>nul || echo ⚠️ No JSON files in bilibili_api path
-              )
+          :: 第二步：获取bilibili_api路径（简化版）
+          set "BILIBILI_API_PATH=.venv\Lib\site-packages\bilibili_api"
+          if exist "%BILIBILI_API_PATH%" (
+              echo ✅ bilibili_api path: %BILIBILI_API_PATH%
+              :: 验证JSON文件（仅日志，不影响构建）
+              dir "%BILIBILI_API_PATH%\*.json" 2>nul || echo ⚠️ No JSON files in bilibili_api path
           ) else (
               echo ⚠️ bilibili_api path not found, skip include-data-dir
+              set "BILIBILI_API_PATH="
           )
       
-          :: 最终配置
-          set "NUITKA_OPTS=%NUITKA_OPTS% --enable-plugin=dill-compat"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=matplotlib"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pytest"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --windows-console-mode=force"
-          set "NUITKA_OPTS=%NUITKA_OPTS% --assume-yes-for-downloads"
-      
-          :: ==============================================
-          :: 第四步：执行构建（简化参数打印，避免符号错误）
-          :: ==============================================
+          :: 第三步：执行Nuitka构建（拆分参数，避免长度超限）
           echo === Nuitka Build Start ===
-          .venv\Scripts\python.exe -m nuitka %NUITKA_OPTS% launcher.py
+          :: 基础参数（从配置文件读取） + 动态参数（config文件+ bilibili_api路径）
+          .venv\Scripts\python.exe -m nuitka ^
+            --config-file=.nuitka.cfg ^
+            :: 动态添加config目录的文件（批量简化）
+            --include-data-files=config/=config/ ^
+            :: 动态添加bilibili_api路径（如果存在）
+            %BILIBILI_API_PATH:+=--include-data-dir=%BILIBILI_API_PATH%=bilibili_api% ^
+            :: 入口文件（唯一位置参数，避免解析错误）
+            launcher.py
+      
+          :: 检查构建结果
           if errorlevel 1 (
               echo ❌ Nuitka build failed!
               exit /b 1
           ) else (
               echo ✅ Nuitka build completed successfully
+              :: 验证产物是否存在
+              if exist "dist\projectneko_server.exe" (
+                  echo ✅ Executable created: dist\projectneko_server.exe
+              )
           )
-            
                   # --- Rename Nuitka output directory ---
                   - name: Rename build output
                     shell: bash
