@@ -313,6 +313,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: |
+          :: 第一步：先验证bilibili_api是否安装，未安装则临时安装
+          echo "=== Check bilibili_api installation ==="
+          .venv\Scripts\python.exe -c "import bilibili_api; print('✅ bilibili_api installed')" 2>nul || (
+            echo "⚠️ bilibili_api not found, installing..."
+            .venv\Scripts\pip.exe install bilibili-api-python
+          )
+      
           :: 初始化Nuitka参数（规范变量赋值，避免截断）
           set "NUITKA_OPTS=--standalone --output-dir=dist --output-filename=projectneko_server.exe"
           set "NUITKA_OPTS=%NUITKA_OPTS% --windows-icon-from-ico=assets/icon.ico"
@@ -384,18 +391,29 @@ jobs:
           set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api"
           set "NUITKA_OPTS=%NUITKA_OPTS% --include-package=bilibili_api"
           
-          :: 关键修复：Windows下健壮获取bilibili_api路径（增加存在性检查和兜底）
+          :: 关键修复：两种方式获取bilibili_api路径（双重兜底）
           set "BILIBILI_API_PATH="
-          for /f "delims=" %%i in ('".venv\Scripts\python.exe" -c "import bilibili_api, os; print(os.path.dirname(bilibili_api.__file__))" 2^>nul') do set "BILIBILI_API_PATH=%%i"
+          :: 方式1：通过site-packages获取（更稳定）
+          for /f "delims=" %%i in ('".venv\Scripts\python.exe" -c "import site, os; [print(os.path.join(p, 'bilibili_api')) for p in site.getsitepackages() if os.path.exists(os.path.join(p, 'bilibili_api'))]" 2^>nul') do set "BILIBILI_API_PATH=%%i"
+          :: 方式2：备用（通过__file__）
+          if not defined BILIBILI_API_PATH (
+            for /f "delims=" %%i in ('".venv\Scripts\python.exe" -c "import bilibili_api, os; print(os.path.dirname(bilibili_api.__file__))" 2^>nul') do set "BILIBILI_API_PATH=%%i"
+          )
+          
+          :: 验证并添加参数
           if defined BILIBILI_API_PATH (
             if exist "%BILIBILI_API_PATH%" (
               set "NUITKA_OPTS=%NUITKA_OPTS% --include-data-dir=%BILIBILI_API_PATH%=bilibili_api"
               echo ✅ Successfully get bilibili_api path: %BILIBILI_API_PATH%
+              :: 额外验证：列出该目录下的JSON文件
+              dir "%BILIBILI_API_PATH%\*.json" 2>nul || echo ⚠️ No JSON files found in bilibili_api path
             ) else (
               echo ⚠️ bilibili_api path not exist: %BILIBILI_API_PATH%
             )
           ) else (
-            echo ⚠️ Failed to get bilibili_api path, skip include-data-dir
+            echo ⚠️ Failed to get bilibili_api path, use fallback: include all bilibili_api package data
+            :: 兜底：强制包含bilibili_api的包数据（即使路径获取失败）
+            set "NUITKA_OPTS=%NUITKA_OPTS% --include-package-data=bilibili_api --include-data-files=%USERPROFILE%\AppData\Local\pypoetry\Cache\virtualenvs\*\Lib\site-packages\bilibili_api\*.json=bilibili_api/"
           )
           
           :: 最终配置
@@ -404,41 +422,41 @@ jobs:
           set "NUITKA_OPTS=%NUITKA_OPTS% --nofollow-import-to=pytest"
           set "NUITKA_OPTS=%NUITKA_OPTS% --windows-console-mode=force"
           set "NUITKA_OPTS=%NUITKA_OPTS% --assume-yes-for-downloads"
-
+      
           :: 打印最终参数（便于调试）
           echo === Final Nuitka Options ===
           echo %NUITKA_OPTS%
           echo ============================
-
+      
           :: 执行Nuitka构建
           .venv\Scripts\python.exe -m nuitka %NUITKA_OPTS% launcher.py
-
-      # --- Rename Nuitka output directory ---
-      - name: Rename build output
-        shell: bash
-        run: |
-          if [ -d "dist/launcher.dist" ]; then
-            mv dist/launcher.dist dist/Xiao8
-          fi
-          # macOS: playwright_browsers was excluded from Nuitka (xattr bug with
-          # spaces in .app paths), copy it manually into the output directory
-          if [[ "$RUNNER_OS" == "macOS" && -d "playwright_browsers" ]]; then
-            cp -R playwright_browsers dist/Xiao8/playwright_browsers
-            echo "Copied playwright_browsers into dist/Xiao8/"
-          fi
-          # 增强验证：打印bilibili_api相关文件
-          echo "=== Check bilibili-api files ==="
-          find dist/Xiao8 -path "*/bilibili_api/*" | head -20 || echo "No bilibili-api files found!"
-          echo "=== Build output ==="
-          ls -la dist/Xiao8/ || echo "dist/Xiao8 not found!"
-
-      - name: Upload Python backend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/Xiao8/
-          retention-days: 7
-          compression-level: 6
+      
+            # --- Rename Nuitka output directory ---
+            - name: Rename build output
+              shell: bash
+              run: |
+                if [ -d "dist/launcher.dist" ]; then
+                  mv dist/launcher.dist dist/Xiao8
+                fi
+                # macOS: playwright_browsers was excluded from Nuitka (xattr bug with
+                # spaces in .app paths), copy it manually into the output directory
+                if [[ "$RUNNER_OS" == "macOS" && -d "playwright_browsers" ]]; then
+                  cp -R playwright_browsers dist/Xiao8/playwright_browsers
+                  echo "Copied playwright_browsers into dist/Xiao8/"
+                fi
+                # 增强验证：打印bilibili_api相关文件
+                echo "=== Check bilibili-api files ==="
+                find dist/Xiao8 -path "*/bilibili_api/*" | head -20 || echo "No bilibili-api files found!"
+                echo "=== Build output ==="
+                ls -la dist/Xiao8/ || echo "dist/Xiao8 not found!"
+      
+            - name: Upload Python backend artifact
+              uses: actions/upload-artifact@v4
+              with:
+                name: ${{ matrix.artifact_name }}
+                path: dist/Xiao8/
+                retention-days: 7
+                compression-level: 6
 
   # ──────────────────────────────────────────────
   # Step 2: Build Electron desktop app
