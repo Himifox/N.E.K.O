@@ -85,9 +85,15 @@ class Live2DManager {
         this.savedModelParameters = null; // 保存的模型参数（从parameters.json加载），供定时器定期应用
         this._shouldApplySavedParams = false; // 是否应该应用保存的参数
         this._savedParamsTimer = null; // 保存参数应用的定时器
+        this._mouseTrackingEnabled = window.mouseTrackingEnabled !== false; // 鼠标跟踪启用状态
         
         // 模型加载锁，防止并发加载导致重复模型叠加
         this._isLoadingModel = false;
+        this._activeLoadToken = 0;
+        this._modelLoadState = 'idle';
+        this._isModelReadyForInteraction = false;
+        this._initPIXIPromise = null;
+        this._lastPIXIContext = { canvasId: null, containerId: null };
 
         // 常驻表情：使用官方 expression 播放并在清理后自动重放
         this.persistentExpressionNames = [];
@@ -152,6 +158,10 @@ class Live2DManager {
 
     // 初始化 PIXI 应用
     async initPIXI(canvasId, containerId, options = {}) {
+        if (this._initPIXIPromise) {
+            return await this._initPIXIPromise;
+        }
+
         if (this.isInitialized && this.pixi_app && this.pixi_app.stage) {
             console.warn('Live2D 管理器已经初始化');
             return this.pixi_app;
@@ -161,6 +171,10 @@ class Live2DManager {
         if (this.isInitialized && (!this.pixi_app || !this.pixi_app.stage)) {
             console.warn('Live2D 管理器标记为已初始化，但 pixi_app 或 stage 不存在，重置状态');
             if (this.pixi_app && this.pixi_app.destroy) {
+                if (this._screenChangeHandler) {
+                    window.removeEventListener('resize', this._screenChangeHandler);
+                    this._screenChangeHandler = null;
+                }
                 try {
                     this.pixi_app.destroy(true);
                 } catch (e) {
@@ -189,36 +203,137 @@ class Live2DManager {
             autoDensity: true
         };
 
+        this._initPIXIPromise = (async () => {
+            try {
+                // 使用 window.screen 全屏尺寸初始化渲染器，画布始终覆盖整个屏幕区域
+                // 任务栏/DevTools/键盘等造成的视口缩小只会裁切画布边缘（overflow:hidden），
+                // 不会导致缝隙或模型位移
+                const initW = Math.max(window.screen.width || 1, 1);
+                const initH = Math.max(window.screen.height || 1, 1);
+                this.pixi_app = new PIXI.Application({
+                    view: canvas,
+                    width: initW,
+                    height: initH,
+                    ...defaultOptions,
+                    ...options
+                });
+
+                if (!this.pixi_app) {
+                    throw new Error('PIXI.Application 创建失败：返回值为 null 或 undefined');
+                }
+
+                if (!this.pixi_app.stage) {
+                    throw new Error('PIXI.Application 创建失败：stage 属性不存在');
+                }
+
+                this.isInitialized = true;
+                this._lastPIXIContext = { canvasId, containerId };
+                if (window.targetFrameRate && this.pixi_app.ticker) {
+                    this.pixi_app.ticker.maxFPS = window.targetFrameRate;
+                }
+
+                // 仅在屏幕分辨率真正变化（换显示器/屏幕旋转）时 resize 渲染器并调整模型坐标
+                // 任务栏、DevTools、输入法等视口变化不触发任何操作
+                let lastScreenW = window.screen.width;
+                let lastScreenH = window.screen.height;
+                this._screenChangeHandler = () => {
+                    const sw = window.screen.width;
+                    const sh = window.screen.height;
+                    if (sw === lastScreenW && sh === lastScreenH) return;
+                    lastScreenW = sw;
+                    lastScreenH = sh;
+
+                    const prevW = this.pixi_app.renderer.screen.width;
+                    const prevH = this.pixi_app.renderer.screen.height;
+                    const newW = Math.max(sw, 1);
+                    const newH = Math.max(sh, 1);
+
+                    this.pixi_app.renderer.resize(newW, newH);
+
+                    if (this.currentModel && prevW > 0 && prevH > 0) {
+                        const wRatio = newW / prevW;
+                        const hRatio = newH / prevH;
+                        this.currentModel.x *= wRatio;
+                        this.currentModel.y *= hRatio;
+                        const areaRatio = Math.sqrt(wRatio * hRatio);
+                        this.currentModel.scale.x *= areaRatio;
+                        this.currentModel.scale.y *= areaRatio;
+                    }
+                    console.log('[Live2D Core] 屏幕分辨率变化，渲染器已 resize:', { prevW, prevH, newW, newH });
+                };
+                window.addEventListener('resize', this._screenChangeHandler);
+
+                console.log('[Live2D Core] PIXI.Application 初始化成功，stage 已创建');
+                return this.pixi_app;
+            } catch (error) {
+                console.error('[Live2D Core] PIXI.Application 初始化失败:', error);
+                this.pixi_app = null;
+                this.isInitialized = false;
+                throw error;
+            }
+        })();
+
         try {
-            this.pixi_app = new PIXI.Application({
-                view: canvas,
-                resizeTo: container,
-                ...defaultOptions,
-                ...options
-            });
+            return await this._initPIXIPromise;
+        } finally {
+            this._initPIXIPromise = null;
+        }
+    }
 
-            // 验证 pixi_app 和 stage 是否创建成功
-            if (!this.pixi_app) {
-                throw new Error('PIXI.Application 创建失败：返回值为 null 或 undefined');
-            }
-            
-            if (!this.pixi_app.stage) {
-                throw new Error('PIXI.Application 创建失败：stage 属性不存在');
-            }
+    async ensurePIXIReady(canvasId, containerId, options = {}) {
+        const lastContext = this._lastPIXIContext || {};
+        const contextMatches = (
+            lastContext.canvasId === canvasId &&
+            lastContext.containerId === containerId
+        );
 
-            this.isInitialized = true;
-            // 应用初始帧率设置
-            if (window.targetFrameRate && this.pixi_app.ticker) {
-                this.pixi_app.ticker.maxFPS = window.targetFrameRate;
-            }
-            console.log('[Live2D Core] PIXI.Application 初始化成功，stage 已创建');
+        if (this.isInitialized && this.pixi_app && this.pixi_app.stage && contextMatches) {
             return this.pixi_app;
-        } catch (error) {
-            console.error('[Live2D Core] PIXI.Application 初始化失败:', error);
+        }
+        if (this.isInitialized && !contextMatches) {
+            if (this._screenChangeHandler) {
+                window.removeEventListener('resize', this._screenChangeHandler);
+                this._screenChangeHandler = null;
+            }
+            if (this.pixi_app && this.pixi_app.destroy) {
+                try {
+                    this.pixi_app.destroy(true);
+                } catch (e) {
+                    console.warn('[Live2D Core] ensurePIXIReady 销毁旧 PIXI 失败:', e);
+                }
+            }
             this.pixi_app = null;
             this.isInitialized = false;
-            throw error;
         }
+        const app = await this.initPIXI(canvasId, containerId, options);
+        if (app && app.stage) {
+            this._lastPIXIContext = { canvasId, containerId };
+        }
+        return app;
+    }
+
+    async rebuildPIXI(canvasId, containerId, options = {}) {
+        if (this._initPIXIPromise) {
+            try {
+                await this._initPIXIPromise;
+            } catch (e) {
+                console.warn('[Live2D Core] 忽略旧初始化失败，继续重建 PIXI:', e);
+            }
+        }
+        if (this._screenChangeHandler) {
+            window.removeEventListener('resize', this._screenChangeHandler);
+            this._screenChangeHandler = null;
+        }
+        if (this.pixi_app && this.pixi_app.destroy) {
+            try {
+                this.pixi_app.destroy(true);
+            } catch (e) {
+                console.warn('[Live2D Core] 重建时销毁旧 PIXI 失败:', e);
+            }
+        }
+        this.pixi_app = null;
+        this.isInitialized = false;
+        return await this.initPIXI(canvasId, containerId, options);
     }
 
     /**
@@ -361,37 +476,35 @@ class Live2DManager {
         }
 
         try {
-            this.currentModel.anchor.set(0.65, 0.75);
-            // 根据移动端/桌面端重置到默认位置和缩放
             if (isMobileWidth()) {
-                // 移动端默认设置
+                this.currentModel.anchor.set(0.5, 0.1);
                 const scale = Math.min(
                     0.5,
                     window.innerHeight * 1.3 / 4000,
                     window.innerWidth * 1.2 / 2000
                 );
                 this.currentModel.scale.set(scale);
-                this.currentModel.x = this.pixi_app.renderer.width * 0.5;
-                this.currentModel.y = this.pixi_app.renderer.height * 0.28;
+                this.currentModel.x = this.pixi_app.renderer.screen.width * 0.5;
+                this.currentModel.y = this.pixi_app.renderer.screen.height * 0.28;
             } else {
-                // 桌面端默认设置（右下角）
+                this.currentModel.anchor.set(0.65, 0.75);
                 const scale = Math.min(
                     0.5,
                     (window.innerHeight * 0.75) / 7000,
                     (window.innerWidth * 0.6) / 7000
                 );
                 this.currentModel.scale.set(scale);
-                this.currentModel.x = this.pixi_app.renderer.width * 0.65;
-                this.currentModel.y = this.pixi_app.renderer.height * 0.6;
+                this.currentModel.x = this.pixi_app.renderer.screen.width;
+                this.currentModel.y = this.pixi_app.renderer.screen.height;
             }
 
             console.log('模型位置已复位到初始状态');
 
-            // 复位后自动保存位置
+            // 复位后自动保存位置（viewport 基准与 applyModelSettings / _savePositionAfterInteraction 一致，使用 renderer.screen）
             if (this._lastLoadedModelPath) {
                 const viewport = {
-                    width: window.screen.width,
-                    height: window.screen.height
+                    width: this.pixi_app.renderer.screen.width,
+                    height: this.pixi_app.renderer.screen.height
                 };
                 const saveSuccess = await this.saveUserPreferences(
                     this._lastLoadedModelPath,
@@ -487,6 +600,60 @@ class Live2DManager {
         Object.keys(this._floatingButtons).forEach(btnId => {
             this.setButtonActive(btnId, false);
         });
+    }
+
+    /**
+     * 【统一状态管理】根据全局状态同步浮动按钮状态
+     * 用于模型重新加载后恢复按钮状态（如画质变更后）
+     */
+    _syncButtonStatesWithGlobalState() {
+        if (!this._floatingButtons) return;
+
+        // 同步语音按钮状态
+        const isRecording = window.isRecording || false;
+        if (this._floatingButtons.mic) {
+            this.setButtonActive('mic', isRecording);
+        }
+
+        // 同步屏幕分享按钮状态
+        // 屏幕分享状态通过 DOM 元素判断（screenButton 的 active class 或 stopButton 的 disabled 状态）
+        let isScreenSharing = false;
+        const screenButton = document.getElementById('screenButton');
+        const stopButton = document.getElementById('stopButton');
+        if (screenButton && screenButton.classList.contains('active')) {
+            isScreenSharing = true;
+        } else if (stopButton && !stopButton.disabled) {
+            isScreenSharing = true;
+        }
+        if (this._floatingButtons.screen) {
+            this.setButtonActive('screen', isScreenSharing);
+        }
+    }
+
+    /**
+     * 设置鼠标跟踪是否启用
+     * @param {boolean} enabled - 是否启用鼠标跟踪
+     */
+    setMouseTrackingEnabled(enabled) {
+        this._mouseTrackingEnabled = enabled;
+        window.mouseTrackingEnabled = enabled;
+
+        if (enabled) {
+            // 重新启用时，如果模型存在且没有鼠标跟踪监听器，则启用
+            if (this.currentModel && !this._mouseTrackingListener) {
+                this.enableMouseTracking(this.currentModel);
+            }
+        } else {
+            this.isFocusing = false;
+        }
+    }
+
+    /**
+     * 获取鼠标跟踪是否启用
+     * @returns {boolean}
+     */
+    isMouseTrackingEnabled() {
+        return this._mouseTrackingEnabled !== false;
     }
 }
 

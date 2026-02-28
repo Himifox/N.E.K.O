@@ -17,6 +17,9 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
     
     // 设置加载锁
     this._isLoadingModel = true;
+    const loadToken = ++this._activeLoadToken;
+    this._modelLoadState = 'preparing';
+    this._isModelReadyForInteraction = false;
 
     try {
         // 移除当前模型
@@ -138,7 +141,7 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
         this.currentModel = model;
 
         // 使用统一的模型配置方法
-        await this._configureLoadedModel(model, modelPath, options);
+        await this._configureLoadedModel(model, modelPath, options, loadToken);
 
         return model;
     } catch (error) {
@@ -153,7 +156,7 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
                 this.currentModel = model;
 
                 // 使用统一的模型配置方法
-                await this._configureLoadedModel(model, defaultModelPath, options);
+                await this._configureLoadedModel(model, defaultModelPath, options, loadToken);
 
                 console.log('成功回退到默认模型: mao_pro');
                 return model;
@@ -168,14 +171,88 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
     } finally {
         // 无论成功还是失败，都要释放加载锁
         this._isLoadingModel = false;
+        if (this._activeLoadToken === loadToken && this._modelLoadState !== 'ready') {
+            this._modelLoadState = 'idle';
+            this._isModelReadyForInteraction = false;
+        }
     }
+};
+
+Live2DManager.prototype._isLoadTokenActive = function(loadToken) {
+    return this._activeLoadToken === loadToken;
+};
+
+Live2DManager.prototype._waitForModelVisualStability = function(model, loadToken, options = {}) {
+    const requiredStableFrames = options.requiredStableFrames || 4;
+    const maxFrames = options.maxFrames || 40;
+    const minDimension = options.minDimension || 2;
+    const deltaThreshold = options.deltaThreshold || 2;
+    const minElapsedMs = options.minElapsedMs || 260;
+
+    return new Promise((resolve) => {
+        let frameCount = 0;
+        let stableFrames = 0;
+        let prevW = null;
+        let prevH = null;
+        const startTs = performance.now();
+
+        const tick = () => {
+            if (!this._isLoadTokenActive(loadToken) || !model || model.destroyed || !model.parent) {
+                resolve(false);
+                return;
+            }
+
+            frameCount += 1;
+            let width = 0;
+            let height = 0;
+
+            try {
+                const bounds = model.getBounds();
+                width = Number(bounds.width) || 0;
+                height = Number(bounds.height) || 0;
+            } catch (_) {
+                width = 0;
+                height = 0;
+            }
+
+            const hasValidSize = Number.isFinite(width) && Number.isFinite(height) && width > minDimension && height > minDimension;
+            const sizeStable = hasValidSize &&
+                prevW !== null &&
+                prevH !== null &&
+                Math.abs(width - prevW) <= deltaThreshold &&
+                Math.abs(height - prevH) <= deltaThreshold;
+
+            if (sizeStable) {
+                stableFrames += 1;
+            } else {
+                stableFrames = 0;
+            }
+
+            prevW = width;
+            prevH = height;
+
+            const elapsed = performance.now() - startTs;
+            const hasWaitedLongEnough = elapsed >= minElapsedMs;
+            if ((hasValidSize && stableFrames >= requiredStableFrames && hasWaitedLongEnough) || frameCount >= maxFrames) {
+                resolve(hasValidSize);
+                return;
+            }
+
+            requestAnimationFrame(tick);
+        };
+
+        requestAnimationFrame(tick);
+    });
 };
 
 // 不再需要预解析嘴巴参数ID，保留占位以兼容旧代码调用
 Live2DManager.prototype.resolveMouthParameterId = function() { return null; };
 
 // 配置已加载的模型（私有方法，用于消除主路径和回退路径的重复代码）
-Live2DManager.prototype._configureLoadedModel = async function(model, modelPath, options) {
+Live2DManager.prototype._configureLoadedModel = async function(model, modelPath, options, loadToken) {
+    if (!this._isLoadTokenActive(loadToken)) return;
+    this._modelLoadState = 'applying';
+
     // 解析模型目录名与根路径，供资源解析使用
     try {
         let urlString = null;
@@ -223,6 +300,7 @@ Live2DManager.prototype._configureLoadedModel = async function(model, modelPath,
 
     // 应用位置和缩放设置
     this.applyModelSettings(model, options);
+    model.alpha = 0;
     
     // 注意：用户偏好参数的应用延迟到模型目录参数加载完成后，
     // 以确保正确的优先级顺序（模型目录参数 > 用户偏好参数）
@@ -233,8 +311,6 @@ Live2DManager.prototype._configureLoadedModel = async function(model, modelPath,
     // 设置交互性
     if (options.dragEnabled !== false) {
         this.setupDragAndDrop(model);
-        // 启用窗口大小改变时的自动吸附检测
-        this.setupResizeSnapDetection();
     }
 
     // 设置滚轮缩放
@@ -247,10 +323,12 @@ Live2DManager.prototype._configureLoadedModel = async function(model, modelPath,
         this.setupTouchZoom(model);
     }
 
-    // 启用鼠标跟踪
-    if (options.mouseTracking !== false) {
-        this.enableMouseTracking(model);
-    }
+    // 启用鼠标跟踪（始终启用监听器，内部根据设置决定是否执行眼睛跟踪）
+    // enableMouseTracking 包含悬浮菜单显示/隐藏逻辑，必须始终启用
+    this.enableMouseTracking(model);
+    // 同步内部状态（眼睛跟踪是否启用）
+    this._mouseTrackingEnabled = window.mouseTrackingEnabled !== false;
+    console.log(`[Live2D] 鼠标跟踪初始化: window.mouseTrackingEnabled=${window.mouseTrackingEnabled}, _mouseTrackingEnabled=${this._mouseTrackingEnabled}`);
 
     // 设置浮动按钮系统（在模型完全就绪后再绑定ticker回调）
     this.setupFloatingButtons(model);
@@ -376,6 +454,29 @@ Live2DManager.prototype._configureLoadedModel = async function(model, modelPath,
             }
         }, 500);
     }
+
+    this._modelLoadState = 'settling';
+    if (this._isLoadTokenActive(loadToken)) {
+        await this._waitForModelVisualStability(model, loadToken);
+    }
+    if (!this._isLoadTokenActive(loadToken) || !model || model.destroyed) {
+        return;
+    }
+    // 在隐藏状态下先做一次边界校正，避免“先出现再瞬移”
+    if (typeof this._checkSnapRequired === 'function') {
+        try {
+            const snapInfo = await this._checkSnapRequired(model, { threshold: 300 });
+            if (snapInfo && Number.isFinite(snapInfo.targetX) && Number.isFinite(snapInfo.targetY)) {
+                model.x = snapInfo.targetX;
+                model.y = snapInfo.targetY;
+            }
+        } catch (e) {
+            console.warn('[Live2D Model] 初次加载边界校正失败:', e);
+        }
+    }
+    model.alpha = 1;
+    this._isModelReadyForInteraction = true;
+    this._modelLoadState = 'ready';
 
     // 调用回调函数
     if (this.onModelLoaded) {
@@ -585,6 +686,48 @@ Live2DManager.prototype.installMouthOverride = function() {
             
             // 然后在动作更新后立即覆盖参数
             try {
+                // === 点击效果平滑过渡处理 ===
+                // 当 _clickFadeState 存在时，说明点击效果正在平滑恢复中
+                // 此时跳过 savedModelParameters 和 persistentExpression 的强制写入
+                // 改为执行插值过渡
+                const fadeState = this._clickFadeState;
+                if (fadeState) {
+                    const now = performance.now();
+                    const elapsed = now - fadeState.startTime;
+                    // 防御性校验：确保 duration 为有限正数，否则视为立即完成
+                    const safeDuration = (Number.isFinite(fadeState.duration) && fadeState.duration > 0) ? fadeState.duration : 1;
+                    const linearProgress = Math.min(Math.max(elapsed / safeDuration, 0), 1);
+                    // cubic ease-out: 快进慢出
+                    const t = 1 - Math.pow(1 - linearProgress, 3);
+
+                    for (const [paramId, target] of Object.entries(fadeState.targetValues)) {
+                        const start = fadeState.startValues[paramId];
+                        if (start === undefined) continue;
+                        try {
+                            const interpolated = start + (target - start) * t;
+                            coreModel.setParameterValueById(paramId, interpolated);
+                        } catch (_) {}
+                    }
+
+                    // 口型参数不受过渡影响，照常写入
+                    for (const [id, idx] of Object.entries(mouthParamIndices)) {
+                        try {
+                            coreModel.setParameterValueByIndex(idx, this.mouthValue);
+                        } catch (_) {}
+                    }
+
+                    // 过渡完成：清除 fade 状态，恢复正常覆写逻辑
+                    if (linearProgress >= 1) {
+                        this._clickFadeState = null;
+                        console.log('[ClickEffect] 平滑过渡完成');
+                        // 确保常驻表情最终精确应用
+                        if (typeof this.applyPersistentExpressionsNative === 'function') {
+                            try { this.applyPersistentExpressionsNative(true); } catch (_) {}
+                        }
+                    }
+                    // 跳过下方的正常覆写逻辑
+                } else {
+                // === 正常帧：应用保存参数 + 常驻表情 ===
                 // 1. 应用保存的模型参数（智能叠加模式）
                 if (this.savedModelParameters && this._shouldApplySavedParams) {
                     const persistentParamIds = this.getPersistentExpressionParamIds();
@@ -644,6 +787,7 @@ Live2DManager.prototype.installMouthOverride = function() {
                         }
                     }
                 }
+                } // 结束 else（正常帧覆写逻辑）
             } catch (_) {}
         };
         } // 结束 else 块（确保 motionManager 和 coreModel 都已准备好）
@@ -698,7 +842,8 @@ Live2DManager.prototype.installMouthOverride = function() {
             }
             
             // 2. 写入常驻表情参数（跳过口型参数以避免覆盖lipsync）
-            if (this.persistentExpressionParamsByName) {
+            // 当点击效果正在淡入淡出时，跳过常驻表情写入以避免覆盖插值
+            if (this.persistentExpressionParamsByName && !this._clickFadeState) {
                 for (const name in this.persistentExpressionParamsByName) {
                     const params = this.persistentExpressionParamsByName[name];
                     if (Array.isArray(params)) {
@@ -826,16 +971,17 @@ Live2DManager.prototype.applyModelSettings = function(model, options) {
     const { preferences, isMobile = false } = options;
 
     if (isMobile) {
+        model.anchor.set(0.5, 0.1);
         const scale = Math.min(
             0.5,
             window.innerHeight * 1.3 / 4000,
             window.innerWidth * 1.2 / 2000
         );
         model.scale.set(scale);
-        model.x = this.pixi_app.renderer.width * 0.5;
-        model.y = this.pixi_app.renderer.height * 0.28;
-        model.anchor.set(0.5, 0.1);
+        model.x = this.pixi_app.renderer.screen.width * 0.5;
+        model.y = this.pixi_app.renderer.screen.height * 0.28;
     } else {
+        model.anchor.set(0.65, 0.75);
         if (preferences && preferences.scale && preferences.position) {
             const scaleX = Number(preferences.scale.x);
             const scaleY = Number(preferences.scale.y);
@@ -843,12 +989,12 @@ Live2DManager.prototype.applyModelSettings = function(model, options) {
             const posY = Number(preferences.position.y);
 
             // 当前渲染器尺寸
-            const rendererWidth = this.pixi_app.renderer.width;
-            const rendererHeight = this.pixi_app.renderer.height;
+            const rendererWidth = this.pixi_app.renderer.screen.width;
+            const rendererHeight = this.pixi_app.renderer.screen.height;
 
-            // 使用 screen 尺寸做跨分辨率归一化（不受 F12、输入法等临时视口变化影响）
-            const currentScreenW = window.screen.width;
-            const currentScreenH = window.screen.height;
+            // 使用渲染器逻辑尺寸做归一化（renderer 不再自动 resize，尺寸等价于稳定的屏幕分辨率）
+            const currentScreenW = this.pixi_app.renderer.screen.width;
+            const currentScreenH = this.pixi_app.renderer.screen.height;
             const hasValidScreen = Number.isFinite(currentScreenW) && Number.isFinite(currentScreenH) &&
                 currentScreenW > 0 && currentScreenH > 0;
 
@@ -903,8 +1049,8 @@ Live2DManager.prototype.applyModelSettings = function(model, options) {
                 }
             } else {
                 console.warn('保存的位置设置无效，使用默认值');
-                model.x = rendererWidth * 0.65;
-                model.y = rendererHeight * 0.6;
+                model.x = rendererWidth;
+                model.y = rendererHeight;
             }
         } else {
             const scale = Math.min(
@@ -913,10 +1059,9 @@ Live2DManager.prototype.applyModelSettings = function(model, options) {
                 (window.innerWidth * 0.6) / 7000
             );
             model.scale.set(scale);
-            model.x = this.pixi_app.renderer.width * 0.65;
-            model.y = this.pixi_app.renderer.height * 0.6;
+            model.x = this.pixi_app.renderer.screen.width;
+            model.y = this.pixi_app.renderer.screen.height;
         }
-        model.anchor.set(0.65, 0.75);
     }
 };
 

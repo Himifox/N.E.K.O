@@ -245,7 +245,7 @@ function init_app() {
     // 主动搭话功能相关
     let proactiveChatEnabled = false;
     let proactiveVisionEnabled = false;
-    let proactiveVisionChatEnabled = false;
+    let proactiveVisionChatEnabled = true;
     let proactiveNewsChatEnabled = false;
     let proactiveVideoChatEnabled = false;
     let mergeMessagesEnabled = false;
@@ -336,6 +336,7 @@ function init_app() {
     // 动画设置：画质和帧率
     let renderQuality = 'medium';   // 'low' | 'medium' | 'high'
     let targetFrameRate = 60;       // 30 | 45 | 60
+    const mapRenderQualityToFollowPerf = (quality) => (quality === 'high' ? 'medium' : 'low');
 
     // 暴露到全局作用域，供 live2d.js 等其他模块访问和修改
     window.proactiveChatEnabled = proactiveChatEnabled;
@@ -350,6 +351,7 @@ function init_app() {
     window.proactiveVisionInterval = proactiveVisionInterval;
     window.renderQuality = renderQuality;
     window.targetFrameRate = targetFrameRate;
+    window.cursorFollowPerformanceLevel = mapRenderQualityToFollowPerf(renderQuality);
 
     // WebSocket心跳保活
     let heartbeatInterval = null;
@@ -616,8 +618,9 @@ function init_app() {
                     }
 
                     // 检测严重错误，自动隐藏准备提示（兜底机制）
-                    const criticalErrorKeywords = ['连续失败', '已停止', '自动重试', '崩溃', '欠费', 'API Key被'];
-                    if (criticalErrorKeywords.some(keyword => response.message.includes(keyword))) {
+                    const criticalErrorKeywords = ['连续失败', '已停止', '自动重试', '崩溃', '欠费', 'API Key被', '限额', '耗尽', '额度', '429', '1008', 'time limit', '超时'];
+                    const responseMessageLower = String(response.message || '').toLowerCase();
+                    if (criticalErrorKeywords.some(keyword => responseMessageLower.includes(keyword.toLowerCase()))) {
                         console.log(window.t('console.seriousErrorHidePreparing'));
                         hideVoicePreparingToast();
                     }
@@ -2189,8 +2192,16 @@ function init_app() {
         }
     }
 
-    // 保存选择的麦克风到服务器
+    // 保存选择的麦克风到服务器和 localStorage
     async function saveSelectedMicrophone(deviceId) {
+        try {
+            if (deviceId) {
+                localStorage.setItem('neko_selected_microphone', deviceId);
+            } else {
+                localStorage.removeItem('neko_selected_microphone');
+            }
+        } catch (e) { }
+
         try {
             const response = await fetch('/api/characters/set_microphone', {
                 method: 'POST',
@@ -2210,16 +2221,15 @@ function init_app() {
         }
     }
 
-    // 加载上次选择的麦克风
-    async function loadSelectedMicrophone() {
+    // 加载上次选择的麦克风（优先从 localStorage 加载，快速恢复）
+    function loadSelectedMicrophone() {
         try {
-            const response = await fetch('/api/characters/get_microphone');
-            if (response.ok) {
-                const data = await response.json();
-                selectedMicrophoneId = data.microphone_id || null;
+            const saved = localStorage.getItem('neko_selected_microphone');
+            if (saved) {
+                selectedMicrophoneId = saved;
+                console.log(`已加载麦克风设置: ${saved}`);
             }
-        } catch (err) {
-            console.error(window.t('console.loadMicrophoneSelectionFailed'), err);
+        } catch (e) {
             selectedMicrophoneId = null;
         }
     }
@@ -2925,6 +2935,12 @@ function init_app() {
 
             screenButton.classList.add('active');
             syncFloatingScreenButtonState(true);
+
+            if (window.unlockAchievement) {
+                window.unlockAchievement('ACH_SEND_IMAGE').catch(err => {
+                    console.error('解锁发送图片成就失败:', err);
+                });
+            }
 
             try {
                 stopProactiveVisionDuringSpeech();
@@ -7247,9 +7263,12 @@ function init_app() {
                 return;
             }
 
+            keyboardCheckbox.removeEventListener('change', checkAndToggleTaskHUD);
             keyboardCheckbox.addEventListener('change', checkAndToggleTaskHUD);
+            browserCheckbox.removeEventListener('change', checkAndToggleTaskHUD);
             browserCheckbox.addEventListener('change', checkAndToggleTaskHUD);
             if (userPluginCheckbox) {
+                userPluginCheckbox.removeEventListener('change', checkAndToggleTaskHUD);
                 userPluginCheckbox.addEventListener('change', checkAndToggleTaskHUD);
             }
             
@@ -8370,6 +8389,11 @@ function init_app() {
                     const screenshotDataUrl = results[screenshotIndex];
                     if (screenshotDataUrl) {
                         requestBody.screenshot_data = screenshotDataUrl;
+                        if (window.unlockAchievement) {
+                            window.unlockAchievement('ACH_SEND_IMAGE').catch(err => {
+                                console.error('解锁发送图片成就失败:', err);
+                            });
+                        }
                     } else {
                         // 截图失败，从 enabled_modes 中移除 vision
                         console.log('截图失败，移除 vision 模式');
@@ -8792,6 +8816,9 @@ function init_app() {
         const currentTargetFrameRate = typeof window.targetFrameRate !== 'undefined'
             ? window.targetFrameRate
             : targetFrameRate;
+        const currentMouseTracking = typeof window.mouseTrackingEnabled !== 'undefined'
+            ? window.mouseTrackingEnabled
+            : true;
 
         const settings = {
             proactiveChatEnabled: currentProactive,
@@ -8805,7 +8832,8 @@ function init_app() {
             proactiveVisionInterval: currentProactiveVisionInterval,
             proactivePersonalChatEnabled: currentPersonalChat,
             renderQuality: currentRenderQuality,
-            targetFrameRate: currentTargetFrameRate
+            targetFrameRate: currentTargetFrameRate,
+            mouseTrackingEnabled: currentMouseTracking
         };
         localStorage.setItem('project_neko_settings', JSON.stringify(settings));
 
@@ -8883,8 +8911,8 @@ function init_app() {
                 // 主动视觉：从localStorage加载设置
                 proactiveVisionEnabled = settings.proactiveVisionEnabled ?? false;
                 window.proactiveVisionEnabled = proactiveVisionEnabled; // 同步到全局
-                // 视觉搭话：从localStorage加载设置
-                proactiveVisionChatEnabled = settings.proactiveVisionChatEnabled ?? false;
+                // 视觉搭话：从localStorage加载设置（默认开启，用户可手动关闭）
+                proactiveVisionChatEnabled = settings.proactiveVisionChatEnabled ?? true;
                 window.proactiveVisionChatEnabled = proactiveVisionChatEnabled; // 同步到全局
                 // 新闻搭话：从localStorage加载设置
                 proactiveNewsChatEnabled = settings.proactiveNewsChatEnabled ?? false;
@@ -8910,9 +8938,18 @@ function init_app() {
                 // 画质设置
                 renderQuality = settings.renderQuality ?? 'medium';
                 window.renderQuality = renderQuality;
+                window.cursorFollowPerformanceLevel = mapRenderQualityToFollowPerf(renderQuality);
                 // 帧率设置
                 targetFrameRate = settings.targetFrameRate ?? 60;
                 window.targetFrameRate = targetFrameRate;
+                // 鼠标跟踪设置（严格转换为布尔值）
+                if (typeof settings.mouseTrackingEnabled === 'boolean') {
+                    window.mouseTrackingEnabled = settings.mouseTrackingEnabled;
+                } else if (typeof settings.mouseTrackingEnabled === 'string') {
+                    window.mouseTrackingEnabled = settings.mouseTrackingEnabled === 'true';
+                } else {
+                    window.mouseTrackingEnabled = true;
+                }
 
                 console.log('已加载设置:', {
                     proactiveChatEnabled: proactiveChatEnabled,
@@ -8946,7 +8983,9 @@ function init_app() {
                 window.proactiveChatInterval = proactiveChatInterval;
                 window.proactiveVisionInterval = proactiveVisionInterval;
                 window.renderQuality = renderQuality;
+                window.cursorFollowPerformanceLevel = mapRenderQualityToFollowPerf(renderQuality);
                 window.targetFrameRate = targetFrameRate;
+                window.mouseTrackingEnabled = true;
 
                 // 持久化首次启动设置，避免每次重新检测
                 saveSettings();
@@ -8965,12 +9004,17 @@ function init_app() {
             window.proactiveChatInterval = proactiveChatInterval;
             window.proactiveVisionInterval = proactiveVisionInterval;
             window.renderQuality = renderQuality;
+            window.cursorFollowPerformanceLevel = mapRenderQualityToFollowPerf(renderQuality);
             window.targetFrameRate = targetFrameRate;
+            window.mouseTrackingEnabled = true;
         }
     }
 
     // 加载设置
     loadSettings();
+
+    // 加载麦克风设备选择
+    loadSelectedMicrophone();
 
     // 加载麦克风增益设置
     loadMicGainSetting();

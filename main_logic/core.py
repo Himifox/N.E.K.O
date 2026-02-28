@@ -19,7 +19,7 @@ from main_logic.omni_realtime_client import OmniRealtimeClient
 from main_logic.omni_offline_client import OmniOfflineClient
 from main_logic.tts_client import get_tts_worker
 from config import MEMORY_SERVER_PORT, TOOL_SERVER_PORT
-from utils.config_manager import get_config_manager
+from utils.config_manager import get_config_manager, get_reserved
 from utils.logger_config import get_module_logger
 from utils.api_config_loader import get_free_voices
 from utils.language_utils import normalize_language_code
@@ -84,7 +84,7 @@ class LLMSessionManager:
         self.core_api_type = realtime_config.get('api_type', '') or self._config_manager.get_core_config().get('CORE_API_TYPE', '')
         self.memory_server_port = MEMORY_SERVER_PORT
         self.audio_api_key = self._config_manager.get_core_config()['AUDIO_API_KEY']  # 用于CosyVoice自定义音色
-        raw_voice_id = self.lanlan_basic_config[self.lanlan_name].get('voice_id', '')
+        raw_voice_id = self._get_voice_id()
         if self._should_block_free_preset_voice(raw_voice_id, realtime_config.get('base_url', '')):
             self.voice_id = ''
             self._is_free_preset_voice = False
@@ -511,12 +511,20 @@ class LLMSessionManager:
         self.session_closed_by_server = True
         
         if message:
-            if '欠费' in message:
-                await self.send_status("💥 智谱API触发欠费bug。请考虑充值1元。")
-            elif 'standing' in message:
-                await self.send_status("💥 阿里API已欠费。")
+            message_text = str(message)
+            message_text_lower = message_text.lower()
+            if '欠费' in message_text_lower or 'standing' in message_text_lower:
+                await self.send_status(json.dumps({"code": "API_ARREARS"}))
+            elif 'quota' in message_text_lower or 'time limit' in message_text_lower:
+                await self.send_status(json.dumps({"code": "API_QUOTA_TIME"}))
+            elif '429' in message_text_lower or 'too many' in message_text_lower:
+                await self.send_status(json.dumps({"code": "API_RATE_LIMIT"}))
+            elif 'policy violation' in message_text_lower:
+                await self.send_status(json.dumps({"code": "API_POLICY_VIOLATION", "details": {"msg": message_text}}))
+            elif '1008' in message_text_lower:
+                await self.send_status(json.dumps({"code": "API_1008_FALLBACK", "details": {"msg": message_text}}))
             else:
-                await self.send_status(message)
+                await self.send_status(message_text)
         logger.info("💥 Session closed by API Server.")
         await self.disconnected_by_server()
     
@@ -696,6 +704,14 @@ class LLMSessionManager:
             and self._is_preset_voice_id(voice_id)
         )
 
+    def _get_voice_id(self) -> str:
+        return get_reserved(
+            self.lanlan_basic_config[self.lanlan_name],
+            'voice_id',
+            default='',
+            legacy_keys=('voice_id',),
+        )
+
     def normalize_text(self, text): # 对文本进行基本预处理
         text = text.strip()
         text = text.replace("\n", "")
@@ -744,7 +760,7 @@ class LLMSessionManager:
         # 重新读取角色配置以获取最新的voice_id（支持角色切换后的音色热更新）
         _, _, _, self.lanlan_basic_config, _, _, _, _, _, _ = self._config_manager.get_character_data()
         old_voice_id = self.voice_id
-        raw_voice_id = self.lanlan_basic_config[self.lanlan_name].get('voice_id', '')
+        raw_voice_id = self._get_voice_id()
         block_free_preset = self._should_block_free_preset_voice(raw_voice_id, realtime_config.get('base_url', ''))
         if block_free_preset:
             self.voice_id = ''
@@ -1177,13 +1193,15 @@ class LLMSessionManager:
             # 无论成功还是失败，都重置启动标志
             self.is_starting_session = False
 
-    async def send_user_activity(self):
+    async def send_user_activity(self, interrupted_speech_id: Optional[str] = None):
         """发送用户活动信号，附带被打断的 speech_id 用于精确打断控制"""
         try:
             if self.websocket and hasattr(self.websocket, 'client_state') and self.websocket.client_state == self.websocket.client_state.CONNECTED:
+                if interrupted_speech_id is None:
+                    interrupted_speech_id = self.current_speech_id
                 message = {
                     "type": "user_activity",
-                    "interrupted_speech_id": self.current_speech_id  # 告诉前端应丢弃哪个 speech_id
+                    "interrupted_speech_id": interrupted_speech_id  # 告诉前端应丢弃哪个 speech_id
                 }
                 await self.websocket.send_json(message)
         except WebSocketDisconnect:
@@ -1254,7 +1272,7 @@ class LLMSessionManager:
             # 重新读取角色配置以获取最新的voice_id（支持角色切换后的音色热更新）
             _, _, _, self.lanlan_basic_config, _, _, _, _, _, _ = self._config_manager.get_character_data()
             old_voice_id = self.voice_id
-            raw_voice_id = self.lanlan_basic_config[self.lanlan_name].get('voice_id', '')
+            raw_voice_id = self._get_voice_id()
             block_free_preset = self._should_block_free_preset_voice(raw_voice_id, realtime_config.get('base_url', ''))
             if block_free_preset:
                 self.voice_id = ''
@@ -1991,11 +2009,15 @@ class LLMSessionManager:
                 
                 # 文本模式：直接发送文本
                 if isinstance(data, str):
-                    # 为每次文本输入生成新的speech_id（用于TTS和lipsync）
+                    # 先打断当前正在播放的语音（旧speech_id），避免误打断新回复
+                    async with self.lock:
+                        interrupted_speech_id = self.current_speech_id
+
+                    await self.send_user_activity(interrupted_speech_id)
+
+                    # 再为本次新回复生成新的speech_id（用于TTS和lipsync）
                     async with self.lock:
                         self.current_speech_id = str(uuid4())
-
-                    await self.send_user_activity()
 
                     # 文本模式：在发送用户输入前，将挂起的 agent 任务回调注入 LLM 上下文
                     if self.pending_agent_callbacks:
@@ -2434,8 +2456,29 @@ class LLMSessionManager:
                     await asyncio.sleep(0.01)
                     continue
 
-                if isinstance(data, tuple) and len(data) == 2 and data[0] == "__ready__":
-                    continue
+                if isinstance(data, tuple) and len(data) == 2:
+                    if data[0] == "__ready__":
+                        continue
+                    elif data[0] == "__error__":
+                        error_msg = data[1]
+                        error_msg_text = str(error_msg)
+                        logger.error(f"TTS Worker Error: {error_msg}")
+                        error_msg_lower = error_msg_text.lower()
+                        # 识别配额限制
+                        if '欠费' in error_msg_lower or 'standing' in error_msg_lower:
+                            user_msg = json.dumps({"code": "API_ARREARS"})
+                        elif 'quota' in error_msg_lower or 'time limit' in error_msg_lower:
+                            user_msg = json.dumps({"code": "API_QUOTA_TIME"})
+                        elif '429' in error_msg_lower or 'too many' in error_msg_lower:
+                            user_msg = json.dumps({"code": "API_RATE_LIMIT"})
+                        elif 'policy violation' in error_msg_lower:
+                            user_msg = json.dumps({"code": "API_POLICY_VIOLATION", "details": {"msg": error_msg_text}})
+                        elif '1008' in error_msg_lower:
+                            user_msg = json.dumps({"code": "API_1008_FALLBACK", "details": {"msg": error_msg_text}})
+                        else:
+                            user_msg = f"TTS服务连接失败: {error_msg_text}"
+                        asyncio.create_task(self.send_status(user_msg))
+                        continue
 
                 size = len(data) if isinstance(data, (bytes, bytearray)) else f"type={type(data).__name__}"
                 logger.debug(f"🎧 handler dequeued audio: {size}, qsize≈{q.qsize()}")
