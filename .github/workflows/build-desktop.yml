@@ -126,8 +126,12 @@ jobs:
 
           # 验证包安装
           echo "验证包安装..."
-          .venv/bin/python -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
-
+          echo "验证包安装..."
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            .venv/Scripts/python.exe -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
+          else
+            .venv/bin/python -c "import bilibili_api_pathchange; print(f'包已安装: {bilibili_api_pathchange.__file__}')" || echo "包安装失败"
+          fi
       # --- Generate runtime config files (not tracked in git) ---
       - name: Generate default config files
         shell: bash
@@ -277,7 +281,13 @@ jobs:
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=jinja2"
           NUITKA_OPTS="$NUITKA_OPTS --include-package-data=certifi"
 
-          if .venv/bin/python -c "import bilibili_api_pathchange" 2>/dev/null; then
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            PYTHON_EXEC=".venv/Scripts/python.exe"
+          else
+            PYTHON_EXEC=".venv/bin/python"
+          fi
+
+          if $PYTHON_EXEC -c "import bilibili_api_pathchange" 2>/dev/null; then
             NUITKA_OPTS="$NUITKA_OPTS --include-package-data=bilibili_api_pathchange"
             echo "包含bilibili_api_pathchange包数据"
           else
