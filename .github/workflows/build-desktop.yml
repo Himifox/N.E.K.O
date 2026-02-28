@@ -229,22 +229,40 @@ jobs:
           path: electron-app/dist/
 
   # ──────────────────────────────────────────────
-  # Step 3: 发布 Nightly 版本
+  # Step 3: 发布 Nightly 版本 (修正了 246 行附近的语法)
   # ──────────────────────────────────────────────
   nightly:
     needs: [version, build-python, build-electron]
     runs-on: ubuntu-latest
-    permissions: { contents: write }
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with: { path: artifacts }
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
       - name: Organize release files
         run: |
-          mkdir release
-          find artifacts/desktop-* -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) -exec cp {} release/ \;
+          mkdir -p release
+          # 查找所有的可执行文件并汇总
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" \) -exec cp {} release/ \;
+          
       - name: Create nightly release
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 检查是否有文件需要发布
+          if [ -z "$(ls -A release/)" ]; then
+            echo "没有发现构建产物，跳过发布。"
+            exit 0
+          fi
+          # 删除旧的 nightly 标签并重新创建
           gh release delete nightly --yes --cleanup-tag || true
-          gh release create nightly release/* --title "Nightly Build $(date +%Y%m%d)" --prerelease --notes "Automatic build from ${{ needs.version.outputs.version }}"
+          gh release create nightly release/* \
+            --title "Nightly Build $(date +%Y%m%d)" \
+            --target "${{ github.sha }}" \
+            --prerelease \
+            --notes "自动构建版本: ${{ needs.version.outputs.version }}"
