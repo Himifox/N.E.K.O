@@ -322,28 +322,58 @@ jobs:
               echo ✅ bilibili_api is already installed
           )
       
-          :: 第二步：获取bilibili_api路径（简化版）
+          :: 第二步：定义基础参数（分批次拼接，避免长度超限）
+          set "BASE_OPTS=--standalone --output-dir=dist --output-filename=projectneko_server.exe"
+          set "BASE_OPTS=%BASE_OPTS% --windows-icon-from-ico=assets/icon.ico"
+          set "BASE_OPTS=%BASE_OPTS% --company-name=Project N.E.K.O. --product-name=N.E.K.O. AI Assistant"
+          set "BASE_OPTS=%BASE_OPTS% --file-version=1.0.0.0 --product-version=1.0.0.0"
+      
+          :: 第三步：定义包含/排除参数（批量简写，减少长度）
+          set "INCLUDE_OPTS=--include-package=uvicorn,fastapi,starlette,jinja2,websockets"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package=langchain_community,langchain_core,langchain_openai"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package=main_server,memory_server,agent_server,config,brain"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package=main_logic,main_routers,memory,utils,steamworks"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package=browser_use,browser_use_sdk,playwright,bilibili_api"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --nofollow-import-to=plugin.plugins,matplotlib,pytest"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --nofollow-import-to=audiolab,pyrnnoise"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package-data=jinja2,certifi,bilibili_api,audiolab,pyrnnoise"
+          set "INCLUDE_OPTS=%INCLUDE_OPTS% --include-package-data=browser_use,playwright"
+      
+          :: 第四步：定义数据文件/目录参数（批量包含，减少行数）
+          set "DATA_OPTS=--include-data-dir=assets=assets --include-data-dir=templates=templates"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-dir=data/browser_use_prompts=data/browser_use_prompts"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-dir=playwright_browsers=playwright_browsers --include-data-dir=static=static"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-files=config/=config/"  :: 批量包含config目录所有文件
+          set "DATA_OPTS=%DATA_OPTS% --include-data-files=steam_api64.dll=steam_api64.dll"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-files=steam_api64.lib=steam_api64.lib"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-files=SteamworksPy64.dll=SteamworksPy64.dll"
+          set "DATA_OPTS=%DATA_OPTS% --include-data-files=steam_appid.txt=steam_appid.txt"
+      
+          :: 第五步：动态添加bilibili_api路径（纯CMD兼容语法）
+          set "BILIBILI_OPTS="
           set "BILIBILI_API_PATH=.venv\Lib\site-packages\bilibili_api"
           if exist "%BILIBILI_API_PATH%" (
-              echo ✅ bilibili_api path: %BILIBILI_API_PATH%
-              :: 验证JSON文件（仅日志，不影响构建）
-              dir "%BILIBILI_API_PATH%\*.json" 2>nul || echo ⚠️ No JSON files in bilibili_api path
+              set "BILIBILI_OPTS=--include-data-dir=%BILIBILI_API_PATH%=bilibili_api"
+              echo ✅ Added bilibili_api path: %BILIBILI_API_PATH%
+              dir "%BILIBILI_API_PATH%\*.json" 2>nul || echo ⚠️ No JSON files in bilibili_api path (safe to ignore)
           ) else (
               echo ⚠️ bilibili_api path not found, skip include-data-dir
-              set "BILIBILI_API_PATH="
           )
       
-          :: 第三步：执行Nuitka构建（拆分参数，避免长度超限）
+          :: 第六步：定义其他配置
+          set "OTHER_OPTS=--enable-plugin=dill-compat --windows-console-mode=force --assume-yes-for-downloads"
+      
+          :: 第七步：拼接最终参数（分4批，避免CMD长度超限）
+          set "FINAL_OPTS=%BASE_OPTS% %INCLUDE_OPTS% %DATA_OPTS% %BILIBILI_OPTS% %OTHER_OPTS%"
+      
+          :: 打印参数（便于调试，可选）
+          echo === Final Nuitka Options (truncated) ===
+          echo %FINAL_OPTS:~0,500%...  :: 仅打印前500字符，避免日志过长
+          echo =======================================
+      
+          :: 第八步：执行Nuitka构建（核心修复：无换行符，纯单行命令）
           echo === Nuitka Build Start ===
-          :: 基础参数（从配置文件读取） + 动态参数（config文件+ bilibili_api路径）
-          .venv\Scripts\python.exe -m nuitka ^
-            --config-file=.nuitka.cfg ^
-            :: 动态添加config目录的文件（批量简化）
-            --include-data-files=config/=config/ ^
-            :: 动态添加bilibili_api路径（如果存在）
-            %BILIBILI_API_PATH:+=--include-data-dir=%BILIBILI_API_PATH%=bilibili_api% ^
-            :: 入口文件（唯一位置参数，避免解析错误）
-            launcher.py
+          .venv\Scripts\python.exe -m nuitka %FINAL_OPTS% launcher.py
       
           :: 检查构建结果
           if errorlevel 1 (
@@ -351,9 +381,12 @@ jobs:
               exit /b 1
           ) else (
               echo ✅ Nuitka build completed successfully
-              :: 验证产物是否存在
+              :: 验证产物
               if exist "dist\projectneko_server.exe" (
                   echo ✅ Executable created: dist\projectneko_server.exe
+              ) else (
+                  echo ⚠️ Executable not found in dist directory!
+                  exit /b 1
               )
           )
                   # --- Rename Nuitka output directory ---
