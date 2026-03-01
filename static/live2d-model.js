@@ -15,7 +15,7 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
         return Promise.reject(new Error('Model is already loading. Please wait for the current operation to complete.'));
     }
     
-    // 设置加载锁
+    // 设置加载锁，防止并发加载导致重复模型叠加；如果已有加载操作正在进行，拒绝新的加载请求并明确返回错误
     this._isLoadingModel = true;
     const loadToken = ++this._activeLoadToken;
     this._modelLoadState = 'preparing';
@@ -1026,99 +1026,68 @@ Live2DManager.prototype.setMouth = function(value) {
 Live2DManager.prototype.applyModelSettings = function(model, options) {
     const { preferences, isMobile = false } = options;
 
-    if (isMobile) {
-        model.anchor.set(0.5, 0.1);
-        const scale = Math.min(
-            0.5,
-            window.innerHeight * 1.3 / 4000,
-            window.innerWidth * 1.2 / 2000
-        );
-        model.scale.set(scale);
-        model.x = this.pixi_app.renderer.screen.width * 0.5;
-        model.y = this.pixi_app.renderer.screen.height * 0.28;
-    } else {
-        model.anchor.set(0.65, 0.75);
-        if (preferences && preferences.scale && preferences.position) {
-            const scaleX = Number(preferences.scale.x);
-            const scaleY = Number(preferences.scale.y);
-            const posX = Number(preferences.position.x);
-            const posY = Number(preferences.position.y);
+        // 使用视口尺寸作为模型位置的基准（renderer.screen 可能是物理屏幕尺寸，
+        // 但画布实际显示范围受 CSS 限制为 window.innerWidth/innerHeight）
+        const viewWidth = window.innerWidth;
+        const viewHeight = window.innerHeight;
 
-            // 当前渲染器尺寸
-            const rendererWidth = this.pixi_app.renderer.screen.width;
-            const rendererHeight = this.pixi_app.renderer.screen.height;
-
-            // 使用渲染器逻辑尺寸做归一化（renderer 不再自动 resize，尺寸等价于稳定的屏幕分辨率）
-            const currentScreenW = this.pixi_app.renderer.screen.width;
-            const currentScreenH = this.pixi_app.renderer.screen.height;
-            const hasValidScreen = Number.isFinite(currentScreenW) && Number.isFinite(currentScreenH) &&
-                currentScreenW > 0 && currentScreenH > 0;
-
-            // 检查是否有保存的视口信息（用于跨分辨率归一化）
-            const savedViewport = preferences.viewport;
-            const hasViewport = hasValidScreen && savedViewport &&
-                Number.isFinite(savedViewport.width) && Number.isFinite(savedViewport.height) &&
-                savedViewport.width > 0 && savedViewport.height > 0;
-
-            // 计算屏幕比例（如果保存时的屏幕与当前不同，则等比缩放位置和大小）
-            let wRatio = 1;
-            let hRatio = 1;
-            if (hasViewport) {
-                wRatio = currentScreenW / savedViewport.width;
-                hRatio = currentScreenH / savedViewport.height;
-            }
-
-            // 验证缩放值是否有效
-            if (Number.isFinite(scaleX) && Number.isFinite(scaleY) &&
-                scaleX > 0 && scaleY > 0 && scaleX < 10 && scaleY < 10) {
-                // 仅在屏幕分辨率发生"跨代"级别变化时（如 1080p→4K）才归一化缩放
-                // 普通跨屏移动（如 1600x900→2560x1440）不调整，避免用户调好的大小被改
-                const scaleRatio = Math.min(wRatio, hRatio);
-                const isExtremeChange = hasViewport && (scaleRatio > 1.8 || scaleRatio < 0.56);
-                if (isExtremeChange) {
-                    model.scale.set(scaleX * scaleRatio, scaleY * scaleRatio);
-                    console.log('屏幕分辨率大幅变化，缩放已归一化:', { wRatio, hRatio, scaleRatio });
-                } else {
-                    model.scale.set(scaleX, scaleY);
-                }
-            } else {
-                console.warn('保存的缩放设置无效，使用默认值');
-                const defaultScale = Math.min(
-                    0.5,
-                    (window.innerHeight * 0.75) / 7000,
-                    (window.innerWidth * 0.6) / 7000
-                );
-                model.scale.set(defaultScale);
-            }
-
-            // 验证位置值是否有效
-            if (Number.isFinite(posX) && Number.isFinite(posY) &&
-                Math.abs(posX) < 100000 && Math.abs(posY) < 100000) {
-                if (hasViewport && (Math.abs(wRatio - 1) > 0.01 || Math.abs(hRatio - 1) > 0.01)) {
-                    // 视口尺寸有变化，按比例映射位置
-                    model.x = posX * wRatio;
-                    model.y = posY * hRatio;
-                    console.log('视口变化，位置已归一化:', { posX, posY, newX: model.x, newY: model.y });
-                } else {
-                    model.x = posX;
-                    model.y = posY;
-                }
-            } else {
-                console.warn('保存的位置设置无效，使用默认值');
-                model.x = rendererWidth;
-                model.y = rendererHeight;
-            }
-        } else {
+        if (isMobile) {
+            model.anchor.set(0.5, 0.1);
             const scale = Math.min(
                 0.5,
-                (window.innerHeight * 0.75) / 7000,
-                (window.innerWidth * 0.6) / 7000
+                window.innerHeight * 1.3 / 4000,
+                window.innerWidth * 1.2 / 2000
             );
             model.scale.set(scale);
-            model.x = this.pixi_app.renderer.screen.width;
-            model.y = this.pixi_app.renderer.screen.height;
+            model.x = viewWidth * 0.5;
+            model.y = viewHeight * 0.28;
+        } else {
+            model.anchor.set(0.65, 0.75);
+            if (preferences && preferences.scale && preferences.position) {
+                const scaleX = Number(preferences.scale.x);
+                const scaleY = Number(preferences.scale.y);
+                const posX = Number(preferences.position.x);
+                const posY = Number(preferences.position.y);
+
+                // 当前视口尺寸
+                const rendererWidth = viewWidth;
+                const rendererHeight = viewHeight;
+
+                // 验证缩放值是否有效
+                if (Number.isFinite(scaleX) && Number.isFinite(scaleY) &&
+                    scaleX > 0 && scaleY > 0 && scaleX < 10 && scaleY < 10) {
+                    model.scale.set(scaleX, scaleY);
+                } else {
+                    console.warn('保存的缩放设置无效，使用默认值');
+                    const defaultScale = Math.min(
+                        0.5,
+                        (viewHeight * 0.75) / 7000,
+                        (viewWidth * 0.6) / 7000
+                    );
+                    model.scale.set(defaultScale);
+                }
+
+                // 验证位置值是否有效
+                if (Number.isFinite(posX) && Number.isFinite(posY) &&
+                    Math.abs(posX) < 100000 && Math.abs(posY) < 100000) {
+                    model.x = posX;
+                    model.y = posY;
+                } else {
+                    console.warn('保存的位置设置无效，使用默认值');
+                    model.x = rendererWidth;
+                    model.y = rendererHeight;
+                }
+            } else {
+                const scale = Math.min(
+                    0.5,
+                    (viewHeight * 0.75) / 7000,
+                    (viewWidth * 0.6) / 7000
+                );
+                model.scale.set(scale);
+                model.x = viewWidth;
+                model.y = viewHeight;
+            }
         }
-    }
 };
 
 // 应用模型参数

@@ -25,8 +25,8 @@ logger = get_module_logger(__name__)
 # ==================================================
 # 从 bilibili_api 导入 B站 API的 JSON 文件功能
 # ==================================================
-from bilibili_api import set_data_dir
-set_data_dir("config/bilibili_api_data")
+# from bilibili_api import set_data_dir
+# set_data_dir("config/bilibili_api_data")
 
 # ==================================================
 # 从 language_utils 导入区域检测功能
